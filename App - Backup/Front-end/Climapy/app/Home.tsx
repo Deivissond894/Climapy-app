@@ -2,6 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
+import MapView, { Marker } from 'react-native-maps';
+import MapViewDirections from 'react-native-maps-directions';
+import * as Location from 'expo-location';
 import {
   BackHandler,
   Dimensions,
@@ -20,11 +23,14 @@ import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
+const GOOGLE_MAPS_APIKEY = 'COLOQUE_SUA_CHAVE_DO_GOOGLE_AQUI';
+
 interface QuickAction {
   id: string;
   title: string;
   icon: string;
   route: string;
+  color: string;
 }
 
 interface Appointment {
@@ -34,17 +40,19 @@ interface Appointment {
   time: string;
   status: string;
   order: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 const quickActions: QuickAction[] = [
-  { id: '1', title: 'Central de Atendimento', icon: 'document-text-outline', route: '/os-panel' },
-  { id: '2', title: 'Assistente Téc - IA', icon: '../assets/images/IA_icon.jpg', route: '/Audio' },
-  { id: '3', title: 'Cotações/Orçamentos', icon: '../assets/images/Eng.orç.png', route: '/orcamentos-panel' },
-  { id: '4', title: 'Clientes', icon: 'people-outline', route: '/client_panel' },
-  { id: '5', title: 'Serviços', icon: 'build-outline', route: '/Service_panel' },
-  { id: '6', title: 'Agenda', icon: 'calendar-outline', route: '/schedule' },
-  { id: '7', title: 'Finanças', icon: 'trending-up-outline', route: '/finances' },
-  { id: '8', title: 'Fórum', icon: 'chatbubbles-outline', route: '/forum' },
+  { id: '1', title: 'Central de Atendimento', icon: 'document-text-outline', route: '/os-panel', color: '#E3F2FD' },
+  { id: '2', title: 'Assistente Téc - IA', icon: '../assets/images/IA_icon.jpg', route: '/Audio', color: '#F3E5F5' },
+  { id: '3', title: 'Cotações/Orçamentos', icon: '../assets/images/Eng.orç.png', route: '/orcamentos-panel', color: '#E8F5E9' },
+  { id: '4', title: 'Clientes', icon: 'people-outline', route: '/client_panel', color: '#FFF3E0' },
+  { id: '5', title: 'Serviços', icon: 'build-outline', route: '/Service_panel', color: '#FFF9C4' },
+  { id: '6', title: 'Agenda', icon: 'calendar-outline', route: '/schedule', color: '#FCE4EC' },
+  { id: '7', title: 'Finanças', icon: 'trending-up-outline', route: '/finances', color: '#E0F2F1' },
+  { id: '8', title: 'Fórum', icon: 'chatbubbles-outline', route: '/forum', color: '#E1F5FE' },
 ];
 
 const todayAppointments: Appointment[] = [
@@ -54,7 +62,9 @@ const todayAppointments: Appointment[] = [
     address: 'Rua das Flores, 123 - Centro',
     time: '08:00',
     status: 'Aberto',
-    order: 'PEDIDO - 0125'
+    order: 'PEDIDO - 0125',
+    latitude: -23.5505,
+    longitude: -46.6333
   },
   {
     id: '2',
@@ -62,7 +72,9 @@ const todayAppointments: Appointment[] = [
     address: 'Av. Principal, 456 - Jardim',
     time: '14:00',
     status: 'Agendado',
-    order: 'PEDIDO - 0225'
+    order: 'PEDIDO - 0225',
+    latitude: -23.5605,
+    longitude: -46.6433
   },
   {
     id: '3',
@@ -70,7 +82,9 @@ const todayAppointments: Appointment[] = [
     address: 'Rua da Paz, 789 - Vila Nova',
     time: '16:30',
     status: 'Garantia',
-    order: 'PEDIDO - 0325'
+    order: 'PEDIDO - 0325',
+    latitude: -23.5405,
+    longitude: -46.6233
   },
 ];
 
@@ -79,6 +93,21 @@ export default function HomeScreen() {
   const { logout, user } = useAuth();
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
   const backPressCount = useRef(0);
+  const [currentLocation, setCurrentLocation] = useState<any>(null);
+  const [routeSequence, setRouteSequence] = useState<string[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      let location = await Location.getCurrentPositionAsync({});
+      setCurrentLocation({ latitude: location.coords.latitude, longitude: location.coords.longitude });
+    })();
+  }, []);
+
+  const toggleRouteSelection = (id: string) => {
+    setRouteSequence(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
 
   // Controle do botão voltar - APENAS quando a tela Home está em foco
   // Impede volta para login e implementa "Pressione novamente para sair"
@@ -133,7 +162,7 @@ export default function HomeScreen() {
         if (item.route) router.push(item.route as any);
       }}
     >
-      <View style={styles.actionIcon}>
+      <View style={[styles.actionIcon, { backgroundColor: item.color }]}>
         {/(\.png|\.jpg|\.jpeg|\.webp)$/i.test(item.icon) ? (
           <Image
             source={
@@ -164,29 +193,41 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const renderAppointmentCard = ({ item }: { item: Appointment }) => (
-    <View style={styles.appointmentCard}>
-      <View style={styles.appointmentHeader}>
-        <Text style={styles.appointmentOrder}>{item.order}</Text>
-        <TouchableOpacity>
-          <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.appointmentClient}>{item.client}</Text>
-      <Text style={styles.appointmentAddress}>{item.address}</Text>
-      <View style={styles.appointmentFooter}>
-        <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
-        <View style={[
-          styles.statusBadge,
-          item.status === 'Aberto' && styles.statusOpen,
-          item.status === 'Agendado' && styles.statusScheduled,
-          item.status === 'Garantia' && styles.statusWarranty,
-        ]}>
-          <Text style={styles.statusText}>{item.status}</Text>
+  const renderAppointmentCard = ({ item }: { item: Appointment }) => {
+    const getCardColor = (status: string) => {
+      switch (status) {
+        case 'Aberto': return '#FFE4E6'; 
+        case 'Agendado': return '#E0F2FE'; 
+        case 'Garantia': return '#FEF3C7'; 
+        default: return '#FFFFFF';
+      }
+    };
+
+    return (
+      <TouchableOpacity activeOpacity={0.7} onPress={() => toggleRouteSelection(item.id)} style={[styles.appointmentCard, { backgroundColor: getCardColor(item.status), borderWidth: routeSequence.includes(item.id) ? 2 : 0, borderColor: '#1A32E5' }]}>
+        <View style={styles.appointmentHeader}>
+          <Text style={styles.appointmentOrder}>{item.order}</Text>
+          <TouchableOpacity>
+            <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+          </TouchableOpacity>
         </View>
-      </View>
-    </View>
-  );
+        <Text style={styles.appointmentClient}>{item.client}</Text>
+        <Text style={styles.appointmentAddress}>{item.address}</Text>
+        <View style={styles.appointmentFooter}>
+          <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: 'rgba(255, 255, 255, 0.6)' },
+            item.status === 'Aberto' && styles.statusOpen,
+            item.status === 'Agendado' && styles.statusScheduled,
+            item.status === 'Garantia' && styles.statusWarranty,
+          ]}>
+            <Text style={styles.statusText}>{item.status}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -233,9 +274,6 @@ export default function HomeScreen() {
                 <Text style={styles.balanceValue}>R$ 780,00</Text>
               </View>
             </View>
-            <View style={styles.balanceIcon}>
-              <Text style={styles.moneyIcon}>💰</Text>
-            </View>
           </LinearGradient>
         </View>
 
@@ -253,20 +291,34 @@ export default function HomeScreen() {
 
         {/* Map Section */}
         <View style={styles.mapContainer}>
-          <View style={styles.mapPlaceholder}>
-            <View style={[styles.mapPin, { top: 60, left: 120 }]}>
-              <Ionicons name="location" size={24} color="#FF4444" />
-            </View>
-            <View style={[styles.mapPin, { top: 40, left: 200 }]}>
-              <Ionicons name="location" size={24} color="#FF4444" />
-            </View>
-            <View style={[styles.mapPin, { top: 100, left: 80 }]}>
-              <Ionicons name="location" size={24} color="#4444FF" />
-            </View>
-            <View style={[styles.mapPin, { top: 120, left: 250 }]}>
-              <Ionicons name="location" size={24} color="#FF4444" />
-            </View>
-          </View>
+          <MapView
+            style={{ height: 300, width: '100%' }}
+            showsUserLocation={true}
+            initialRegion={{
+              latitude: currentLocation?.latitude || -23.5505,
+              longitude: currentLocation?.longitude || -46.6333,
+              latitudeDelta: 0.1,
+              longitudeDelta: 0.1,
+            }}
+          >
+            {todayAppointments.map((apt) => (
+              apt.latitude && apt.longitude ? (
+                <Marker key={apt.id} coordinate={{ latitude: apt.latitude, longitude: apt.longitude }} title={apt.client} description={apt.order} />
+              ) : null
+            ))}
+
+            {currentLocation && routeSequence.length > 0 && (
+              <MapViewDirections
+                origin={currentLocation}
+                destination={todayAppointments.find(a => a.id === routeSequence[routeSequence.length - 1]) as any}
+                waypoints={routeSequence.slice(0, -1).map(id => todayAppointments.find(a => a.id === id)).filter(Boolean) as any}
+                apikey={GOOGLE_MAPS_APIKEY}
+                strokeWidth={4}
+                strokeColor="#7902E0"
+                optimizeWaypoints={true}
+              />
+            )}
+          </MapView>
         </View>
 
         {/* Today's Appointments */}
