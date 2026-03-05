@@ -1,0 +1,88 @@
+## 📋 Endpoints Disponíveis
+
+### 1. **POST https://climapp-1hxc.onrender.com/ai/process-audio** - Processar Áudio com IA
+
+Este endpoint processa áudio e extrai informações técnicas de manutenção.
+
+#### **URL:**
+```
+POST https://climapp-1hxc.onrender.com/ai/process-audio
+```
+
+#### **Headers:**
+```json
+{
+  "Content-Type": "application/json"
+}
+```
+
+#### **Body (JSON):**
+```json
+{
+  "audioData": "base64_encoded_audio_string_here",
+  "audioFormat": "wav",
+  "uid": "user123",
+  "clientId": "client456"
+}
+```
+
+#### **Parâmetros:**
+- `audioData` (obrigatório): Áudio codificado em base64
+- `audioFormat` (opcional): Formato do áudio - `wav`, `mp3`, `ogg`, `webm`, ou `flac` (padrão: `wav`)
+- `uid` (opcional): ID do usuário
+- `clientId` (opcional): ID do cliente
+
+#### **Resposta de Sucesso (200):**
+```json
+{
+  "success": true,
+  "message": "Áudio processado com sucesso",
+  "data": {
+    "audio_transcrito": "Transcrição completa do áudio...",
+    "resultado": {
+      "problema_identificado": "Compressor com ruído anormal",
+      "pecas_mencionadas": ["compressor", "válvula de expansão", "filtro"],
+      "acao_necessaria": ["substituir compressor", "limpar filtro", "verificar pressão"]
+    },
+    "metadata": {
+      "modelo_ia": "mistralai/voxtral-small-24b-2507",
+      "processado_em": "2025-11-08T10:30:00.000Z",
+      "formato_audio": "wav",
+      "tokens_utilizados": {...}
+    }
+  }
+}
+```
+
+#### **Possíveis Erros:**
+- **400**: Dados de áudio ausentes ou formato inválido
+- **408**: Timeout (arquivo muito grande)
+- **503**: Serviço de IA indisponível
+- **500**: Erro interno do servidor
+
+---
+
+### 2. **GET https://climapp-1hxc.onrender.com/ai/status** - Verificar Status do Serviço
+
+Este endpoint verifica se a API de IA está configurada corretamente.
+
+#### **URL:**
+```
+GET https://climapp-1hxc.onrender.com/ai/status
+```
+
+#### **Resposta (200):**
+```json
+{
+  "success": true,
+  "message": "Status do serviço de IA",
+  "data": {
+    "api_configured": true,
+    "model": "mistralai/voxtral-small-24b-2507",
+    "supported_formats": ["wav", "mp3", "ogg", "webm", "flac"],
+    "endpoint": "/ai/process-audio",
+    "status": "ready",
+    "timestamp": "2025-11-08T10:30:00.000Z"
+  }
+}
+```

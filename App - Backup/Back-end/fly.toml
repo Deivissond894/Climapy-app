@@ -1,0 +1,42 @@
+# fly.toml app configuration file generated for back-end-restless-darkness-2411 on 2026-01-06T19:00:42-03:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'back-end-restless-darkness-2411'
+primary_region = 'gru'
+
+[build]
+
+[env]
+  PORT = "10000"
+  NODE_ENV = "production"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 10000
+  
+  [services.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+# VM otimizada para economia (256MB)
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1

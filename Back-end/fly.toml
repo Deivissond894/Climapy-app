@@ -1,0 +1,45 @@
+# fly.toml app configuration file generated for back-end-falling-shadow-6301 on 2026-01-06T19:00:42-03:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'back-end-falling-shadow-6301'
+primary_region = 'gru'
+
+[build]
+
+[env]
+  PORT = "10000"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 10000
+  force_https = true
+  auto_stop_machines = 'suspend'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+# Health check para verificar se app está funcionando
+[[services.http_checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/health"
+
+# Configuração de concorrência
+[http_service.concurrency]
+  type = "requests"
+  soft_limit = 50
+  hard_limit = 100
+
+# Auto-stop após 1 hora sem uso
+[[http_service.machines]]
+  auto_stop_after = "1h"
+
+# VM otimizada para economia (256MB)
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1

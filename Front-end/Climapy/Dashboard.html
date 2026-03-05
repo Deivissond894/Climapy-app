@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Moderno - Blue Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-body: #0a0e14;
+            --bg-card: #161b22;
+            --blue-dark: #0d47a1;
+            --blue-medium: #1976d2;
+            --blue-light: #00d1ff;
+            --text-main: #ffffff;
+            --text-dim: #8b949e;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--blue-dark);
+            margin-bottom: 30px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 250px 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 20px;
+        }
+
+        /* Estilo dos Cards */
+        .card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: 1px solid #30363d;
+        }
+
+        /* Coluna Lateral de KPIs */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .metric {
+            text-align: left;
+        }
+
+        .metric h3 {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin: 0;
+            text-transform: uppercase;
+        }
+
+        .metric p {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 5px 0;
+            color: var(--blue-light);
+        }
+
+        /* Títulos dos Gráficos */
+        .chart-title {
+            font-size: 0.9rem;
+            text-align: center;
+            margin-bottom: 15px;
+            color: var(--text-dim);
+            font-weight: bold;
+        }
+
+        canvas {
+            max-width: 100%;
+        }
+
+        /* Ocupação do Gráfico de Área no fundo */
+        .full-width {
+            grid-column: 2 / span 2;
+        }
+
+        @media (max-width: 1000px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            .full-width {
+                grid-column: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>DASHBOARD MODERNO <span style="color: var(--blue-light);">BLUE</span></h1>
+    </div>
+
+    <div class="dashboard-grid">
+        
+        <div class="sidebar card">
+            <div class="metric">
+                <h3>Total Faturado</h3>
+                <p>R$ 14.533,90</p>
+            </div>
+            <div class="metric">
+                <h3>Total Unidades</h3>
+                <p>402</p>
+            </div>
+            <div class="metric">
+                <h3>Total Pedidos</h3>
+                <p>71</p>
+            </div>
+            <div class="metric">
+                <h3>Ticket Médio</h3>
+                <p>R$ 204,70</p>
+            </div>
+            <hr style="border: 0.5px solid #30363d; width: 100%;">
+            <div class="metric">
+                <h3>Maior Faturamento</h3>
+                <p style="font-size: 1.1rem;">Coenzima Q10</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="chart-title">TOTAL VENDIDO POR CATEGORIA</div>
+            <canvas id="donutChart"></canvas>
+        </div>
+
+        <div class="card">
+            <div class="chart-title">TOTAL VENDIDO POR MÊS</div>
+            <canvas id="barChart"></canvas>
+        </div>
+
+        <div class="card full-width">
+            <div class="chart-title">QTD VENDIDA POR MÊS (EVOLUÇÃO)</div>
+            <canvas id="areaChart" height="100"></canvas>
+        </div>
+
+    </div>
+
+    <script>
+        // Configurações Globais do Chart.js
+        Chart.defaults.color = '#8b949e';
+        Chart.defaults.font.family = 'Segoe UI';
+
+        // 1. Gráfico de Rosca (Donut)
+        const ctxDonut = document.getElementById('donutChart').getContext('2d');
+        new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: {
+                labels: ['Coenzima Q10', 'Leite Pó', 'Chocolate', 'Pasta Amendoim'],
+                datasets: [{
+                    data: [70, 15, 8, 7],
+                    backgroundColor: ['#0d47a1', '#1976d2', '#1e88e5', '#00d1ff'],
+                    borderWidth: 0
+                }]
+            },
+            options: { plugins: { legend: { position: 'bottom' } } }
+        });
+
+        // 2. Gráfico de Barras
+        const ctxBar = document.getElementById('barChart').getContext('2d');
+        new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai'],
+                datasets: [{
+                    label: 'Faturamento R$',
+                    data: [1785, 3139, 2621, 4346, 2642],
+                    backgroundColor: '#00d1ff',
+                    borderRadius: 5
+                }]
+            }
+        });
+
+        // 3. Gráfico de Área
+        const ctxArea = document.getElementById('areaChart').getContext('2d');
+        new Chart(ctxArea, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai'],
+                datasets: [{
+                    label: 'Unidades',
+                    data: [75, 84, 72, 106, 65],
+                    fill: true,
+                    backgroundColor: 'rgba(0, 209, 255, 0.2)',
+                    borderColor: '#00d1ff',
+                    tension: 0.4
+                }]
+            },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+    </script>
+</body>
+</html>
