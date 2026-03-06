@@ -94,22 +94,46 @@ export default function HomeScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (atendimentos && atendimentos.length > 0) {
-      const formatados = atendimentos.map((atend: any, index: number) => ({
-        id: atend.id || atend._id || String(index),
-        client: atend.clienteNome || 'Cliente não informado',
-        address: atend.clienteEndereco || 'Endereço não informado',
-        time: atend.hora || 'A combinar',
-        status: atend.Status || 'Aberto',
-        order: atend.codigo || `PEDIDO-${index + 1}`,
-        // Simulando coordenadas matemáticas temporárias para os pinos aparecerem no mapa
-        latitude: -23.5505 - (index * 0.01),
-        longitude: -46.6333 - (index * 0.01),
+    const loadAppointmentsWithCoords = async () => {
+      if (!atendimentos || atendimentos.length === 0) {
+        setAppointments([]);
+        return;
+      }
+
+      const formatados = await Promise.all(atendimentos.map(async (atend: any, index: number) => {
+        // Coordenada padrão (caso o endereço não seja encontrado)
+        let lat = -23.5505 - (index * 0.01);
+        let lng = -46.6333 - (index * 0.01);
+
+        // Geocodificação: Transformar endereço em Latitude/Longitude
+        if (atend.clienteEndereco) {
+          try {
+            const geocoded = await Location.geocodeAsync(atend.clienteEndereco);
+            if (geocoded && geocoded.length > 0) {
+              lat = geocoded[0].latitude;
+              lng = geocoded[0].longitude;
+            }
+          } catch (e) {
+            console.log('Erro ao buscar coordenadas para:', atend.clienteEndereco);
+          }
+        }
+
+        return {
+          id: atend.id || atend._id || String(index),
+          client: atend.clienteNome || 'Cliente não informado',
+          address: atend.clienteEndereco || 'Endereço não informado',
+          time: atend.hora || 'A combinar',
+          status: atend.Status || 'Aberto',
+          order: atend.codigo || `PEDIDO-${index + 1}`,
+          latitude: lat,
+          longitude: lng,
+        };
       }));
+      
       setAppointments(formatados);
-    } else {
-      setAppointments([]);
-    }
+    };
+
+    loadAppointmentsWithCoords();
   }, [atendimentos]);
 
   useEffect(() => {
@@ -200,12 +224,18 @@ export default function HomeScreen() {
   );
 
   const getCardColor = (status: string) => {
-    switch (status) {
-      case 'Aberto': return '#FFE4E6'; 
-      case 'Agendado': return '#E0F2FE'; 
-      case 'Garantia': return '#FEF3C7'; 
-      default: return '#FFFFFF';
-    }
+    const s = status?.trim()?.toLowerCase() || '';
+    if (s.includes('aberto')) return '#FFE4E6'; // Vermelho/Rosa claro
+    if (s.includes('agendado')) return '#E0F2FE'; // Azul claro
+    if (s.includes('diagn')) return '#F3E8FF'; // Roxo claro (Diagnóstico)
+    if (s.includes('orç') || s.includes('orc')) return '#FFEDD5'; // Laranja claro (Orçamento)
+    if (s.includes('aprovado')) return '#DCFCE7'; // Verde claro
+    if (s.includes('peça') || s.includes('peca')) return '#FEF9C3'; // Amarelo claro (Aguardando Peça)
+    if (s.includes('execu')) return '#E0E7FF'; // Indigo claro (Em Execução)
+    if (s.includes('conclu')) return '#D1FAE5'; // Verde esmeralda (Concluído)
+    if (s.includes('garantia')) return '#FEF3C7'; // Amarelo/Laranja claro
+    if (s.includes('cancelado')) return '#F3F4F6'; // Cinza claro
+    return '#FFFFFF';
   };
 
   const renderAppointmentCard = ({ item }: { item: Appointment }) => (
