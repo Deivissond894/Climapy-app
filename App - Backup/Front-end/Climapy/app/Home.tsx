@@ -7,9 +7,7 @@ import {
   Dimensions,
   FlatList,
   Image,
-  Linking,
   Modal,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -68,19 +66,6 @@ export default function HomeScreen() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [routeSequence, setRouteSequence] = useState<string[]>([]);
-  const [sortMode, setSortMode] = useState<'distance' | 'manual'>('distance');
-  const [manualAppointments, setManualAppointments] = useState<Appointment[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const onRefresh = React.useCallback(async () => {
-    setRefreshing(true);
-    // Força a limpeza do cache de 5 minutos do Zustand para obrigar a ir no backend
-    useDataStore.setState({ lastFetch: null });
-    if (user?.id) {
-      await fetchData(user.id);
-    }
-    setRefreshing(false);
-  }, [user?.id]);
   
   const backPressCount = useRef(0);
 
@@ -109,35 +94,27 @@ export default function HomeScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    let isMounted = true;
-
     const loadAppointmentsWithCoords = async () => {
       if (!atendimentos || atendimentos.length === 0) {
         setAppointments([]);
-        setManualAppointments([]);
         return;
       }
 
       const formatados = await Promise.all(atendimentos.map(async (atend: any, index: number) => {
+        // Coordenada padrão (caso o endereço não seja encontrado)
         let lat = -23.5505 - (index * 0.01);
         let lng = -46.6333 - (index * 0.01);
 
+        // Geocodificação: Transformar endereço em Latitude/Longitude
         if (atend.clienteEndereco) {
           try {
-            // Timeout de 3 segundos para não travar a lista inteira
-            const geocodePromise = Location.geocodeAsync(atend.clienteEndereco);
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Geocode Timeout')), 3000)
-            );
-            
-            const geocoded = await Promise.race([geocodePromise, timeoutPromise]) as any;
-            
+            const geocoded = await Location.geocodeAsync(atend.clienteEndereco);
             if (geocoded && geocoded.length > 0) {
               lat = geocoded[0].latitude;
               lng = geocoded[0].longitude;
             }
           } catch (e) {
-            console.log('Ignorando erro de geolocalização para mostrar o card:', atend.clienteEndereco);
+            console.log('Erro ao buscar coordenadas para:', atend.clienteEndereco);
           }
         }
 
@@ -153,14 +130,10 @@ export default function HomeScreen() {
         };
       }));
       
-      if (isMounted) {
-        setAppointments(formatados);
-        setManualAppointments(formatados);
-      }
+      setAppointments(formatados);
     };
 
     loadAppointmentsWithCoords();
-    return () => { isMounted = false; };
   }, [atendimentos]);
 
   useEffect(() => {
@@ -171,53 +144,6 @@ export default function HomeScreen() {
       setCurrentLocation({ latitude: location.coords.latitude, longitude: location.coords.longitude });
     })();
   }, []);
-
-  const getDistanceInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Raio da Terra em km
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-    return R * c;
-  };
-
-  const moveAppointment = (id: string, direction: 'up' | 'down') => {
-    setManualAppointments(prev => {
-      const index = prev.findIndex(item => item.id === id);
-      if (index < 0) return prev;
-      if (direction === 'up' && index > 0) {
-        const newArr = [...prev];
-        [newArr[index - 1], newArr[index]] = [newArr[index], newArr[index - 1]];
-        return newArr;
-      }
-      if (direction === 'down' && index < prev.length - 1) {
-        const newArr = [...prev];
-        [newArr[index + 1], newArr[index]] = [newArr[index], newArr[index + 1]];
-        return newArr;
-      }
-      return prev;
-    });
-  };
-
-  const displayedAppointments = React.useMemo(() => {
-    if (sortMode === 'manual') {
-      return manualAppointments;
-    }
-    
-    let sorted = [...appointments];
-    if (currentLocation?.latitude && currentLocation?.longitude) {
-      sorted.sort((a, b) => {
-        if (!a.latitude || !a.longitude) return 1;
-        if (!b.latitude || !b.longitude) return -1;
-        const distA = getDistanceInKm(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
-        const distB = getDistanceInKm(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
-        return distA - distB;
-      });
-    }
-    return sorted;
-  }, [appointments, currentLocation, sortMode, manualAppointments]);
 
   const toggleRouteSelection = (id: string) => {
     setRouteSequence(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -237,33 +163,12 @@ export default function HomeScreen() {
     }
   };
 
-  const openInGoogleMaps = (item: Appointment) => {
-    // Se tiver coordenadas exatas usa elas, senão usa o texto do endereço
-    const destination = item.latitude && item.longitude 
-      ? `${item.latitude},${item.longitude}` 
-      : encodeURIComponent(item.address);
-    
-    // URL universal do Google Maps para rotas
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
-    
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Erro', 'Não foi possível abrir o aplicativo de mapas.');
-    });
-  };
-
   const handleAppointmentOptions = (item: Appointment) => {
     Alert.alert(
       'Opções do Serviço',
       `${item.order} - ${item.client}`,
       [
-        { 
-          text: '📍 Navegar até o local', 
-          onPress: () => openInGoogleMaps(item) 
-        },
-        { 
-          text: 'Reagendar', 
-          onPress: () => Alert.alert('Reagendar', 'Abrindo calendário para nova data...') 
-        },
+        { text: 'Reagendar', onPress: () => Alert.alert('Reagendar', 'Abrindo calendário para nova data...') },
         { 
           text: 'Apagar', 
           style: 'destructive',
@@ -333,67 +238,39 @@ export default function HomeScreen() {
     return '#FFFFFF';
   };
 
-  const renderAppointmentCard = ({ item }: { item: Appointment }) => {
-    let distanceText = '';
-    if (currentLocation?.latitude && item.latitude) {
-      const dist = getDistanceInKm(currentLocation.latitude, currentLocation.longitude, item.latitude, item.longitude);
-      distanceText = dist < 1 ? `🚗 ${(dist * 1000).toFixed(0)} m` : `🚗 ${dist.toFixed(1)} km`;
-    }
-
-    return (
-      <TouchableOpacity 
-        activeOpacity={0.7} 
-        onPress={() => toggleRouteSelection(item.id)} 
-        style={[
-          styles.appointmentCard, 
-          { 
-            backgroundColor: getCardColor(item.status), 
-            borderWidth: routeSequence.includes(item.id) ? 2 : 0, 
-            borderColor: '#1A32E5' 
-          }
-        ]}
-      >
-        <View style={styles.appointmentHeader}>
-          <Text style={styles.appointmentOrder}>{item.order}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {sortMode === 'manual' && (
-              <View style={{ flexDirection: 'row', marginRight: 5 }}>
-                <TouchableOpacity onPress={() => moveAppointment(item.id, 'up')} style={{ padding: 4 }}>
-                  <Ionicons name="chevron-up-circle" size={28} color="#1BAFE0" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => moveAppointment(item.id, 'down')} style={{ padding: 4 }}>
-                  <Ionicons name="chevron-down-circle" size={28} color="#1BAFE0" />
-                </TouchableOpacity>
-              </View>
-            )}
-            <TouchableOpacity onPress={() => handleAppointmentOptions(item)} style={{ padding: 8 }}>
-              <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-            </TouchableOpacity>
-          </View>
+  const renderAppointmentCard = ({ item }: { item: Appointment }) => (
+    <TouchableOpacity 
+      activeOpacity={0.7} 
+      onPress={() => toggleRouteSelection(item.id)} 
+      style={[
+        styles.appointmentCard, 
+        { 
+          backgroundColor: getCardColor(item.status), 
+          borderWidth: routeSequence.includes(item.id) ? 2 : 0, 
+          borderColor: '#1A32E5' 
+        }
+      ]}
+    >
+      <View style={styles.appointmentHeader}>
+        <Text style={styles.appointmentOrder}>{item.order}</Text>
+        <TouchableOpacity onPress={() => handleAppointmentOptions(item)} style={{ padding: 8 }}>
+          <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.appointmentClient}>{item.client}</Text>
+      <Text style={styles.appointmentAddress}>{item.address}</Text>
+      <View style={styles.appointmentFooter}>
+        <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 255, 255, 0.6)' }]}>
+          <Text style={styles.statusText}>{item.status}</Text>
         </View>
-        <Text style={styles.appointmentClient}>{item.client}</Text>
-        <Text style={styles.appointmentAddress}>{item.address}</Text>
-        <View style={styles.appointmentFooter}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
-            {distanceText ? <Text style={[styles.appointmentTime, { color: '#1BAFE0', fontWeight: 'bold' }]}>{distanceText}</Text> : null}
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 255, 255, 0.6)' }]}>
-            <Text style={styles.statusText}>{item.status}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1BAFE0']} />
-        }
-      >
+      <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -476,19 +353,9 @@ export default function HomeScreen() {
 
         {/* Today's Appointments */}
         <View style={styles.appointmentsContainer}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>ATENDIMENTOS</Text>
-            <TouchableOpacity 
-              onPress={() => setSortMode(prev => prev === 'distance' ? 'manual' : 'distance')}
-              style={{ backgroundColor: '#F0F0F0', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 15 }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#1A32E5' }}>
-                {sortMode === 'distance' ? '🚗 GPS Automático' : '✋ Ordem Manual'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.sectionTitle}>ATENDIMENTOS - HOJE</Text>
           <FlatList
-            data={displayedAppointments}
+            data={appointments}
             renderItem={renderAppointmentCard}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
