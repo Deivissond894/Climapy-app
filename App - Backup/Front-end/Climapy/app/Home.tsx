@@ -9,6 +9,7 @@ import {
   Image,
   Linking,
   Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -69,6 +70,17 @@ export default function HomeScreen() {
   const [routeSequence, setRouteSequence] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<'distance' | 'manual'>('distance');
   const [manualAppointments, setManualAppointments] = useState<Appointment[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    // Força a limpeza do cache de 5 minutos do Zustand para obrigar a ir no backend
+    useDataStore.setState({ lastFetch: null });
+    if (user?.id) {
+      await fetchData(user.id);
+    }
+    setRefreshing(false);
+  }, [user?.id]);
   
   const backPressCount = useRef(0);
 
@@ -376,7 +388,12 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1BAFE0']} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>

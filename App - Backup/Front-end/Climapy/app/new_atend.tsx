@@ -422,8 +422,10 @@ export default function NewAtendScreen() {
       setSelectedStatus(STATUS_PADRAO);
       setIsTimeEnabled(true); // Resetar estado da hora
       
-      // Usar replace para substituir toda a pilha e ir direto para os-panel
-      router.replace('/os-panel');
+      // Voltar para a tela inicial (Home) limpando a pilha de navegação
+      while (router.canGoBack()) {
+        router.back();
+      }
     }
     
     setResultModal(null);
