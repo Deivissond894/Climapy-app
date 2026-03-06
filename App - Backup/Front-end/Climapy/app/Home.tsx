@@ -146,6 +146,35 @@ export default function HomeScreen() {
     })();
   }, []);
 
+  const getDistanceInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Raio da Terra em km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+    return R * c;
+  };
+
+  const sortedAppointments = React.useMemo(() => {
+    let sorted = [...appointments];
+    
+    // Se temos a localização do técnico, ordena pela distância
+    if (currentLocation?.latitude && currentLocation?.longitude) {
+      sorted.sort((a, b) => {
+        if (!a.latitude || !a.longitude) return 1; // Joga pro fim se não tem mapa
+        if (!b.latitude || !b.longitude) return -1;
+        
+        const distA = getDistanceInKm(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
+        const distB = getDistanceInKm(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
+        
+        return distA - distB; // Menor distância primeiro
+      });
+    }
+    return sorted;
+  }, [appointments, currentLocation]);
+
   const toggleRouteSelection = (id: string) => {
     setRouteSequence(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
@@ -260,35 +289,46 @@ export default function HomeScreen() {
     return '#FFFFFF';
   };
 
-  const renderAppointmentCard = ({ item }: { item: Appointment }) => (
-    <TouchableOpacity 
-      activeOpacity={0.7} 
-      onPress={() => toggleRouteSelection(item.id)} 
-      style={[
-        styles.appointmentCard, 
-        { 
-          backgroundColor: getCardColor(item.status), 
-          borderWidth: routeSequence.includes(item.id) ? 2 : 0, 
-          borderColor: '#1A32E5' 
-        }
-      ]}
-    >
-      <View style={styles.appointmentHeader}>
-        <Text style={styles.appointmentOrder}>{item.order}</Text>
-        <TouchableOpacity onPress={() => handleAppointmentOptions(item)} style={{ padding: 8 }}>
-          <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.appointmentClient}>{item.client}</Text>
-      <Text style={styles.appointmentAddress}>{item.address}</Text>
-      <View style={styles.appointmentFooter}>
-        <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 255, 255, 0.6)' }]}>
-          <Text style={styles.statusText}>{item.status}</Text>
+  const renderAppointmentCard = ({ item }: { item: Appointment }) => {
+    let distanceText = '';
+    if (currentLocation?.latitude && item.latitude) {
+      const dist = getDistanceInKm(currentLocation.latitude, currentLocation.longitude, item.latitude, item.longitude);
+      distanceText = dist < 1 ? `🚗 ${(dist * 1000).toFixed(0)} m` : `🚗 ${dist.toFixed(1)} km`;
+    }
+
+    return (
+      <TouchableOpacity 
+        activeOpacity={0.7} 
+        onPress={() => toggleRouteSelection(item.id)} 
+        style={[
+          styles.appointmentCard, 
+          { 
+            backgroundColor: getCardColor(item.status), 
+            borderWidth: routeSequence.includes(item.id) ? 2 : 0, 
+            borderColor: '#1A32E5' 
+          }
+        ]}
+      >
+        <View style={styles.appointmentHeader}>
+          <Text style={styles.appointmentOrder}>{item.order}</Text>
+          <TouchableOpacity onPress={() => handleAppointmentOptions(item)} style={{ padding: 8 }}>
+            <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+          </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <Text style={styles.appointmentClient}>{item.client}</Text>
+        <Text style={styles.appointmentAddress}>{item.address}</Text>
+        <View style={styles.appointmentFooter}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
+            {distanceText ? <Text style={[styles.appointmentTime, { color: '#1BAFE0', fontWeight: 'bold' }]}>{distanceText}</Text> : null}
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 255, 255, 0.6)' }]}>
+            <Text style={styles.statusText}>{item.status}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -377,7 +417,7 @@ export default function HomeScreen() {
         <View style={styles.appointmentsContainer}>
           <Text style={styles.sectionTitle}>ATENDIMENTOS - HOJE</Text>
           <FlatList
-            data={appointments}
+            data={sortedAppointments}
             renderItem={renderAppointmentCard}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
