@@ -1,10 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
-import MapView, { Marker } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
-import * as Location from 'expo-location';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import {
   BackHandler,
   Dimensions,
@@ -16,10 +13,15 @@ import {
   Text,
   ToastAndroid,
   TouchableOpacity,
-  View
+  View,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../stores/dataStore';
+import MapView, { Marker } from 'react-native-maps';
+import MapViewDirections from 'react-native-maps-directions';
+import * as Location from 'expo-location';
 
 const { width } = Dimensions.get('window');
 
@@ -55,48 +57,62 @@ const quickActions: QuickAction[] = [
   { id: '8', title: 'Fórum', icon: 'chatbubbles-outline', route: '/forum', color: '#E1F5FE' },
 ];
 
-const todayAppointments: Appointment[] = [
-  {
-    id: '1',
-    client: 'ADNILSON NEVES LOPES',
-    address: 'Rua das Flores, 123 - Centro',
-    time: '08:00',
-    status: 'Aberto',
-    order: 'PEDIDO - 0125',
-    latitude: -23.5505,
-    longitude: -46.6333
-  },
-  {
-    id: '2',
-    client: 'MARIA SILVA SANTOS',
-    address: 'Av. Principal, 456 - Jardim',
-    time: '14:00',
-    status: 'Agendado',
-    order: 'PEDIDO - 0225',
-    latitude: -23.5605,
-    longitude: -46.6433
-  },
-  {
-    id: '3',
-    client: 'JOÃO CARLOS OLIVEIRA',
-    address: 'Rua da Paz, 789 - Vila Nova',
-    time: '16:30',
-    status: 'Garantia',
-    order: 'PEDIDO - 0325',
-    latitude: -23.5405,
-    longitude: -46.6233
-  },
-];
-
 export default function HomeScreen() {
   const router = useRouter();
   const { logout, user } = useAuth();
+  const { atendimentos, fetchData } = useDataStore();
+  
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
-  const backPressCount = useRef(0);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [routeSequence, setRouteSequence] = useState<string[]>([]);
+  
+  const backPressCount = useRef(0);
 
-  React.useEffect(() => {
+  useFocusEffect(
+    useCallback(() => {
+      const backAction = () => {
+        if (backPressCount.current === 0) {
+          backPressCount.current = 1;
+          ToastAndroid.show('Pressione "Voltar" novamente para sair', ToastAndroid.SHORT);
+          setTimeout(() => { backPressCount.current = 0; }, 2000);
+          return true; 
+        } else {
+          BackHandler.exitApp();
+          return false;
+        }
+      };
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+      return () => backHandler.remove();
+    }, [])
+  );
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchData(user.id);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (atendimentos && atendimentos.length > 0) {
+      const formatados = atendimentos.map((atend: any, index: number) => ({
+        id: atend.id || atend._id || String(index),
+        client: atend.clienteNome || 'Cliente não informado',
+        address: atend.clienteEndereco || 'Endereço não informado',
+        time: atend.hora || 'A combinar',
+        status: atend.Status || 'Aberto',
+        order: atend.codigo || `PEDIDO-${index + 1}`,
+        // Simulando coordenadas matemáticas temporárias para os pinos aparecerem no mapa
+        latitude: -23.5505 - (index * 0.01),
+        longitude: -46.6333 - (index * 0.01),
+      }));
+      setAppointments(formatados);
+    } else {
+      setAppointments([]);
+    }
+  }, [atendimentos]);
+
+  useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
@@ -109,36 +125,6 @@ export default function HomeScreen() {
     setRouteSequence(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
-  // Controle do botão voltar - APENAS quando a tela Home está em foco
-  // Impede volta para login e implementa "Pressione novamente para sair"
-  useFocusEffect(
-    useCallback(() => {
-      const backAction = () => {
-        if (backPressCount.current === 0) {
-          // Primeira vez: mostrar toast
-          backPressCount.current = 1;
-          ToastAndroid.show('Pressione "Voltar" novamente para sair', ToastAndroid.SHORT);
-          
-          // Resetar contador após 2 segundos
-          setTimeout(() => {
-            backPressCount.current = 0;
-          }, 2000);
-          
-          return true; // Impede ação padrão
-        } else {
-          // Segunda vez: fechar app
-          BackHandler.exitApp();
-          return false;
-        }
-      };
-
-      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-
-      return () => backHandler.remove();
-    }, [])
-  );
-
-  // Função para pegar apenas o primeiro nome
   const getFirstName = () => {
     if (!user?.username) return '';
     return user.username.split(' ')[0];
@@ -147,20 +133,48 @@ export default function HomeScreen() {
   const handleLogout = async () => {
     try {
       await logout();
-      router.replace('/login'); // Usar replace para limpar o histórico
+      router.replace('/login'); 
     } catch (error) {
       console.error('Erro no logout:', error);
     }
+  };
+
+  const handleAppointmentOptions = (item: Appointment) => {
+    Alert.alert(
+      'Opções do Serviço',
+      `${item.order} - ${item.client}`,
+      [
+        { text: 'Reagendar', onPress: () => Alert.alert('Reagendar', 'Abrindo calendário para nova data...') },
+        { 
+          text: 'Apagar', 
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirmar exclusão',
+              'Tem certeza que deseja apagar este atendimento da tela inicial?',
+              [
+                { text: 'Não', style: 'cancel' },
+                { 
+                  text: 'Sim, Apagar', 
+                  style: 'destructive',
+                  onPress: () => {
+                    setAppointments(prev => prev.filter(apt => apt.id !== item.id));
+                  }
+                }
+              ]
+            );
+          }
+        },
+        { text: 'Cancelar', style: 'cancel' }
+      ]
+    );
   };
 
   const renderQuickAction = ({ item }: { item: QuickAction }) => (
     <TouchableOpacity
       style={styles.actionItem}
       activeOpacity={0.3}
-      onPress={() => {
-        // Apenas navega para a rota do item — feedback é temporário via activeOpacity
-        if (item.route) router.push(item.route as any);
-      }}
+      onPress={() => { if (item.route) router.push(item.route as any); }}
     >
       <View style={[styles.actionIcon, { backgroundColor: item.color }]}>
         {/(\.png|\.jpg|\.jpeg|\.webp)$/i.test(item.icon) ? (
@@ -176,58 +190,53 @@ export default function HomeScreen() {
             resizeMode="contain"
           />
         ) : /\p{Extended_Pictographic}/u.test(item.icon) ? (
-          <Text style={{ fontSize: 26 }}>
-            {item.icon}
-          </Text>
+          <Text style={{ fontSize: 26 }}>{item.icon}</Text>
         ) : (
-          <Ionicons 
-            name={item.icon as any} 
-            size={24} 
-            color="#000000ff"
-          />
+          <Ionicons name={item.icon as any} size={24} color="#000000ff" />
         )}
       </View>
-      <Text style={styles.actionText}>
-        {item.title}
-      </Text>
+      <Text style={styles.actionText}>{item.title}</Text>
     </TouchableOpacity>
   );
 
-  const renderAppointmentCard = ({ item }: { item: Appointment }) => {
-    const getCardColor = (status: string) => {
-      switch (status) {
-        case 'Aberto': return '#FFE4E6'; 
-        case 'Agendado': return '#E0F2FE'; 
-        case 'Garantia': return '#FEF3C7'; 
-        default: return '#FFFFFF';
-      }
-    };
-
-    return (
-      <TouchableOpacity activeOpacity={0.7} onPress={() => toggleRouteSelection(item.id)} style={[styles.appointmentCard, { backgroundColor: getCardColor(item.status), borderWidth: routeSequence.includes(item.id) ? 2 : 0, borderColor: '#1A32E5' }]}>
-        <View style={styles.appointmentHeader}>
-          <Text style={styles.appointmentOrder}>{item.order}</Text>
-          <TouchableOpacity>
-            <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.appointmentClient}>{item.client}</Text>
-        <Text style={styles.appointmentAddress}>{item.address}</Text>
-        <View style={styles.appointmentFooter}>
-          <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: 'rgba(255, 255, 255, 0.6)' },
-            item.status === 'Aberto' && styles.statusOpen,
-            item.status === 'Agendado' && styles.statusScheduled,
-            item.status === 'Garantia' && styles.statusWarranty,
-          ]}>
-            <Text style={styles.statusText}>{item.status}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
+  const getCardColor = (status: string) => {
+    switch (status) {
+      case 'Aberto': return '#FFE4E6'; 
+      case 'Agendado': return '#E0F2FE'; 
+      case 'Garantia': return '#FEF3C7'; 
+      default: return '#FFFFFF';
+    }
   };
+
+  const renderAppointmentCard = ({ item }: { item: Appointment }) => (
+    <TouchableOpacity 
+      activeOpacity={0.7} 
+      onPress={() => toggleRouteSelection(item.id)} 
+      style={[
+        styles.appointmentCard, 
+        { 
+          backgroundColor: getCardColor(item.status), 
+          borderWidth: routeSequence.includes(item.id) ? 2 : 0, 
+          borderColor: '#1A32E5' 
+        }
+      ]}
+    >
+      <View style={styles.appointmentHeader}>
+        <Text style={styles.appointmentOrder}>{item.order}</Text>
+        <TouchableOpacity onPress={() => handleAppointmentOptions(item)} style={{ padding: 8 }}>
+          <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.appointmentClient}>{item.client}</Text>
+      <Text style={styles.appointmentAddress}>{item.address}</Text>
+      <View style={styles.appointmentFooter}>
+        <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 255, 255, 0.6)' }]}>
+          <Text style={styles.statusText}>{item.status}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -235,11 +244,7 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Image
-              source={require('../assets/images/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <Image source={require('../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
             <View>
               <Text style={styles.welcomeText}>BEM-VINDO TÉCNICO(A)</Text>
               <Text style={styles.userName}>{getFirstName()}</Text>
@@ -257,12 +262,7 @@ export default function HomeScreen() {
 
         {/* Balance Card */}
         <View style={styles.balanceCardContainer}>
-          <LinearGradient
-            colors={['#1BAFE0', '#7902E0', '#1A32E5']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.balanceCard}
-          >
+          <LinearGradient colors={['#1BAFE0', '#7902E0', '#1A32E5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
             <View style={styles.balanceContent}>
               <View style={styles.balanceRow}>
                 <Text style={styles.balanceLabel}>Saldo Atual</Text>
@@ -301,7 +301,7 @@ export default function HomeScreen() {
               longitudeDelta: 0.1,
             }}
           >
-            {todayAppointments.map((apt) => (
+            {appointments.map((apt) => (
               apt.latitude && apt.longitude ? (
                 <Marker key={apt.id} coordinate={{ latitude: apt.latitude, longitude: apt.longitude }} title={apt.client} description={apt.order} />
               ) : null
@@ -310,8 +310,8 @@ export default function HomeScreen() {
             {currentLocation && routeSequence.length > 0 && (
               <MapViewDirections
                 origin={currentLocation}
-                destination={todayAppointments.find(a => a.id === routeSequence[routeSequence.length - 1]) as any}
-                waypoints={routeSequence.slice(0, -1).map(id => todayAppointments.find(a => a.id === id)).filter(Boolean) as any}
+                destination={appointments.find(a => a.id === routeSequence[routeSequence.length - 1]) as any}
+                waypoints={routeSequence.slice(0, -1).map(id => appointments.find(a => a.id === id)).filter(Boolean) as any}
                 apikey={GOOGLE_MAPS_APIKEY}
                 strokeWidth={4}
                 strokeColor="#7902E0"
@@ -325,7 +325,7 @@ export default function HomeScreen() {
         <View style={styles.appointmentsContainer}>
           <Text style={styles.sectionTitle}>ATENDIMENTOS - HOJE</Text>
           <FlatList
-            data={todayAppointments}
+            data={appointments}
             renderItem={renderAppointmentCard}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
@@ -334,51 +334,21 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setShowFloatingMenu(!showFloatingMenu)}
-      >
-        <LinearGradient
-          colors={['#1BAFE0', '#7902E0']}
-          style={styles.fabGradient}
-        >
-          <Ionicons 
-            name={showFloatingMenu ? "close" : "add"} 
-            size={28} 
-            color="white" 
-          />
+      <TouchableOpacity style={styles.fab} onPress={() => setShowFloatingMenu(!showFloatingMenu)}>
+        <LinearGradient colors={['#1BAFE0', '#7902E0']} style={styles.fabGradient}>
+          <Ionicons name={showFloatingMenu ? "close" : "add"} size={28} color="white" />
         </LinearGradient>
       </TouchableOpacity>
 
       {/* Floating Menu */}
-      <Modal
-        visible={showFloatingMenu}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowFloatingMenu(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          onPress={() => setShowFloatingMenu(false)}
-        >
+      <Modal visible={showFloatingMenu} transparent={true} animationType="fade" onRequestClose={() => setShowFloatingMenu(false)}>
+        <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowFloatingMenu(false)}>
           <View style={styles.floatingMenu}>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowFloatingMenu(false);
-                router.push('./new_atend');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowFloatingMenu(false); router.push('/new_atend'); }}>
               <Ionicons name="document-text-outline" size={24} color="#666" />
               <Text style={styles.menuText}>Novo Atendimento</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowFloatingMenu(false);
-                router.push('/client');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowFloatingMenu(false); router.push('/client'); }}>
               <Ionicons name="person-add-outline" size={24} color="#666" />
               <Text style={styles.menuText}>Novo Cliente</Text>
             </TouchableOpacity>
@@ -394,268 +364,42 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffffff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    paddingTop: 10, // Aumentei o padding superior
-    marginTop: 30, // Adicionei margem superior
-    backgroundColor: '#fff',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 60,
-    height: 60,
-    marginRight: 15,
-  },
-  welcomeText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  userName: {
-    fontSize: 18,
-    color: '#1A32E5', // Mudei para a cor azul do tema
-    fontWeight: 'bold',
-    marginTop: 4, // Adicionei um pequeno espaço entre o texto de boas-vindas e o nome
-  },
-  headerRight: {
-    flexDirection: 'row',
-  },
-  headerIcon: {
-    marginLeft: 15,
-    padding: 8,
-  },
-  balanceCardContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  balanceCard: {
-    borderRadius: 20,
-    padding: 25,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  balanceContent: {
-    flex: 1,
-  },
-  balanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginVertical: 5,
-  },
-  balanceLabel: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  balanceValue: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  balanceDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    marginVertical: 10,
-  },
-  balanceIcon: {
-    marginLeft: 15,
-  },
-  moneyIcon: {
-    fontSize: 24,
-  },
-  quickActionsContainer: {
-    paddingVertical: 10,
-  },
-  quickActionsList: {
-    paddingHorizontal: 10,
-  },
-  actionItem: {
-    alignItems: 'center',
-    marginHorizontal: 10,
-    width: 80,
-  },
-  actionIcon: {
-    width: 90,
-    height: 50,
-    borderRadius: 30,
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  actionText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  mapContainer: {
-    marginHorizontal: 20,
-    marginVertical: 20,
-    borderRadius: 15,
-    overflow: 'hidden',
-  },
-  mapPlaceholder: {
-    height: 200,
-    backgroundColor: '#E8F4F8',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mapPin: {
-    position: 'absolute',
-  },
-  appointmentsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
-    letterSpacing: 1,
-  },
-  appointmentCard: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  appointmentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  appointmentOrder: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1A32E5',
-  },
-  appointmentClient: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  appointmentAddress: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
-  },
-  appointmentFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  appointmentTime: {
-    fontSize: 14,
-    color: '#666',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  statusOpen: {
-    backgroundColor: '#FFE5E5',
-  },
-  statusScheduled: {
-    backgroundColor: '#E5F3FF',
-  },
-  statusWarranty: {
-    backgroundColor: '#FFF5E5',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#333',
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  fabGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    paddingRight: 20,
-    paddingBottom: 100,
-  },
-  floatingMenu: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 10,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-  },
-  menuText: {
-    marginLeft: 15,
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
+  container: { flex: 1, backgroundColor: '#ffffffff' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, paddingTop: 10, marginTop: 30, backgroundColor: '#fff' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  logo: { width: 60, height: 60, marginRight: 15 },
+  welcomeText: { fontSize: 14, color: '#666', fontWeight: '500' },
+  userName: { fontSize: 18, color: '#1A32E5', fontWeight: 'bold', marginTop: 4 },
+  headerRight: { flexDirection: 'row' },
+  headerIcon: { marginLeft: 15, padding: 8 },
+  balanceCardContainer: { paddingHorizontal: 20, paddingVertical: 20 },
+  balanceCard: { borderRadius: 20, padding: 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5 },
+  balanceContent: { flex: 1 },
+  balanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 5 },
+  balanceLabel: { color: 'rgba(255, 255, 255, 0.9)', fontSize: 16, fontWeight: '500' },
+  balanceValue: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  balanceDivider: { height: 1, backgroundColor: 'rgba(255, 255, 255, 0.3)', marginVertical: 10 },
+  quickActionsContainer: { paddingVertical: 10 },
+  quickActionsList: { paddingHorizontal: 10 },
+  actionItem: { alignItems: 'center', marginHorizontal: 10, width: 80 },
+  actionIcon: { width: 90, height: 50, borderRadius: 30, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  actionText: { fontSize: 12, color: '#666', textAlign: 'center', fontWeight: '500' },
+  mapContainer: { marginHorizontal: 20, marginVertical: 20, borderRadius: 15, overflow: 'hidden' },
+  appointmentsContainer: { paddingHorizontal: 20, paddingBottom: 100 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 15, letterSpacing: 1 },
+  appointmentCard: { backgroundColor: '#fff', borderRadius: 15, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  appointmentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  appointmentOrder: { fontSize: 14, fontWeight: 'bold', color: '#1A32E5' },
+  appointmentClient: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 5 },
+  appointmentAddress: { fontSize: 14, color: '#666', marginBottom: 15 },
+  appointmentFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  appointmentTime: { fontSize: 14, color: '#666' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 },
+  statusText: { fontSize: 12, fontWeight: '600', color: '#333' },
+  fab: { position: 'absolute', bottom: 30, right: 20, width: 60, height: 60, borderRadius: 30, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  fabGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.3)', justifyContent: 'flex-end', alignItems: 'flex-end', paddingRight: 20, paddingBottom: 100 },
+  floatingMenu: { backgroundColor: '#fff', borderRadius: 15, padding: 10, minWidth: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 15 },
+  menuText: { marginLeft: 15, fontSize: 16, color: '#333', fontWeight: '500' },
 });
