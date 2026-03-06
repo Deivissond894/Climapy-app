@@ -42,7 +42,6 @@ export const useDataStore = create<DataStore>()(
         const { lastFetch } = get();
         const now = Date.now();
         
-        // Cache de 5 minutos
         if (lastFetch && now - lastFetch < 5 * 60 * 1000) {
           return;
         }
@@ -50,20 +49,22 @@ export const useDataStore = create<DataStore>()(
         set({ isLoading: true });
 
         try {
-          // Buscar atendimentos usando apiService (já inclui Token e Retentativas)
-          const atendimentosRes = await apiService.get(`/atendimentos/user/${userId}`);
+          const [atendimentosRes, clientesRes] = await Promise.all([
+            apiService.get(`/atendimentos/${userId}`),
+            apiService.get(`/clientes/${userId}`)
+          ]);
 
-          // Buscar clientes
-          const clientesRes = await apiService.get(`/clientes/user/${userId}`);
+          const atendimentosData = atendimentosRes.data?.data || atendimentosRes.data?.atendimentos || atendimentosRes.data || [];
+          const clientesData = clientesRes.data?.data || clientesRes.data?.clientes || clientesRes.data || [];
 
           set({
-            atendimentos: atendimentosRes.data?.atendimentos || atendimentosRes.data || [],
-            clientes: clientesRes.data?.clientes || clientesRes.data || [],
+            atendimentos: Array.isArray(atendimentosData) ? atendimentosData : [],
+            clientes: Array.isArray(clientesData) ? clientesData : [],
             lastFetch: now,
             isLoading: false,
           });
         } catch (error) {
-          console.error('Erro ao buscar dados:', error);
+          console.error('Erro ao buscar dados na store:', error);
           set({ isLoading: false });
         }
       },

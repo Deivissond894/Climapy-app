@@ -142,16 +142,14 @@ export default function WelcomeScreen() {
           {/* Main Content */}
           <View style={styles.textContainer}>
             <View style={styles.pitchWrapper}>
-              <View style={styles.decorativeLine} />
-              <Text style={styles.pitchSubtitle}>Tenha a</Text>
-              <Text style={styles.pitchTitle}>
-                Inteligência{'\n'}
-                <Text style={styles.pitchHighlight}>e Controle</Text>
+              <Text style={styles.eyebrowText}>BEM-VINDO AO CLIMAPY</Text>
+              <Text style={styles.mainTitle}>
+                Gestão <Text style={styles.highlightText}>Inteligente</Text>{'\n'}
+                para Climatização
               </Text>
-              <Text style={styles.pitchSubtitle}>
-                na palma da sua mão
+              <Text style={styles.descriptionText}>
+                O controle total dos seus serviços e clientes na palma da sua mão.
               </Text>
-              <View style={styles.decorativeLine} />
             </View>
           </View>
 
@@ -239,52 +237,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  decorativeLine: {
-    width: 60,
-    height: 3,
-    backgroundColor: '#3117a3ff',
-    borderRadius: 2,
-    marginVertical: 10,
-  },
-  pitchSubtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3117a3ff',
-    letterSpacing: 4,
-    marginBottom: 15,
+  eyebrowText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#8A2BE2',
+    letterSpacing: 2,
+    marginBottom: 12,
     textTransform: 'uppercase',
   },
-  pitchTitle: {
-    fontSize: 56,
+  mainTitle: {
+    fontSize: 40,
     fontWeight: '900',
     color: '#1a1a1a',
     textAlign: 'center',
-    lineHeight: 64,
-    letterSpacing: -2,
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    lineHeight: 46,
+    letterSpacing: -0.5,
+    marginBottom: 16,
   },
-  pitchHighlight: {
-    color: '#3117a3ff',
-    fontWeight: '900',
+  highlightText: {
+    color: '#3117A3',
   },
-  pitchDescription: {
-    fontSize: 20,
-    fontWeight: '400',
-    color: '#666',
+  descriptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#555',
     textAlign: 'center',
-    marginTop: 15,
-    letterSpacing: 0.5,
-    fontStyle: 'italic',
-  },
-  pitchText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#000',
-    textAlign: 'center',
-    lineHeight: 56,
-    letterSpacing: -1,
+    lineHeight: 24,
+    paddingHorizontal: 10,
   },
   startButton: {
     borderRadius: 16,
