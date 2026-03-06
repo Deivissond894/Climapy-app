@@ -7,6 +7,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -163,12 +164,33 @@ export default function HomeScreen() {
     }
   };
 
+  const openInGoogleMaps = (item: Appointment) => {
+    // Se tiver coordenadas exatas usa elas, senão usa o texto do endereço
+    const destination = item.latitude && item.longitude 
+      ? `${item.latitude},${item.longitude}` 
+      : encodeURIComponent(item.address);
+    
+    // URL universal do Google Maps para rotas
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+    
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Erro', 'Não foi possível abrir o aplicativo de mapas.');
+    });
+  };
+
   const handleAppointmentOptions = (item: Appointment) => {
     Alert.alert(
       'Opções do Serviço',
       `${item.order} - ${item.client}`,
       [
-        { text: 'Reagendar', onPress: () => Alert.alert('Reagendar', 'Abrindo calendário para nova data...') },
+        { 
+          text: '📍 Navegar até o local', 
+          onPress: () => openInGoogleMaps(item) 
+        },
+        { 
+          text: 'Reagendar', 
+          onPress: () => Alert.alert('Reagendar', 'Abrindo calendário para nova data...') 
+        },
         { 
           text: 'Apagar', 
           style: 'destructive',
