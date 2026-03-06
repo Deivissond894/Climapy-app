@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { apiService } from '../services/api';
 
 interface Atendimento {
   id: string;
@@ -49,29 +50,15 @@ export const useDataStore = create<DataStore>()(
         set({ isLoading: true });
 
         try {
-          // Buscar atendimentos
-          const atendimentosRes = await fetch(
-            `https://back-end-restless-darkness-2411.fly.dev/atendimentos/${userId}`
-          );
-          
-          let atendimentosData: any = {};
-          if (atendimentosRes.ok) {
-            atendimentosData = await atendimentosRes.json();
-          }
+          // Buscar atendimentos usando apiService (já inclui Token e Retentativas)
+          const atendimentosRes = await apiService.get(`/atendimentos/user/${userId}`);
 
           // Buscar clientes
-          const clientesRes = await fetch(
-            `https://back-end-restless-darkness-2411.fly.dev/clientes/${userId}`
-          );
-          
-          let clientesData: any = {};
-          if (clientesRes.ok) {
-            clientesData = await clientesRes.json();
-          }
+          const clientesRes = await apiService.get(`/clientes/user/${userId}`);
 
           set({
-            atendimentos: atendimentosData.data || [],
-            clientes: clientesData.data || [],
+            atendimentos: atendimentosRes.data?.atendimentos || atendimentosRes.data || [],
+            clientes: clientesRes.data?.clientes || clientesRes.data || [],
             lastFetch: now,
             isLoading: false,
           });

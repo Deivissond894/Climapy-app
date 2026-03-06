@@ -330,6 +330,8 @@ export default function NewAtendScreen() {
 
       // ✅ PASSO 2: Criar atendimento com foto (ou URL já obtida)
       const atendimentoData = {
+        uid: user.id,
+        clienteId: formData.clienteId || formData.clienteCodigo || 'sem-id',
         clienteCodigo: formData.clienteCodigo,
         clienteNome: formData.clienteNome,
         clienteEndereco: formData.clienteEndereco,
