@@ -97,27 +97,35 @@ export default function HomeScreen() {
   }, [user?.id]);
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadAppointmentsWithCoords = async () => {
       if (!atendimentos || atendimentos.length === 0) {
         setAppointments([]);
+        setManualAppointments([]);
         return;
       }
 
       const formatados = await Promise.all(atendimentos.map(async (atend: any, index: number) => {
-        // Coordenada padrão (caso o endereço não seja encontrado)
         let lat = -23.5505 - (index * 0.01);
         let lng = -46.6333 - (index * 0.01);
 
-        // Geocodificação: Transformar endereço em Latitude/Longitude
         if (atend.clienteEndereco) {
           try {
-            const geocoded = await Location.geocodeAsync(atend.clienteEndereco);
+            // Timeout de 3 segundos para não travar a lista inteira
+            const geocodePromise = Location.geocodeAsync(atend.clienteEndereco);
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Geocode Timeout')), 3000)
+            );
+            
+            const geocoded = await Promise.race([geocodePromise, timeoutPromise]) as any;
+            
             if (geocoded && geocoded.length > 0) {
               lat = geocoded[0].latitude;
               lng = geocoded[0].longitude;
             }
           } catch (e) {
-            console.log('Erro ao buscar coordenadas para:', atend.clienteEndereco);
+            console.log('Ignorando erro de geolocalização para mostrar o card:', atend.clienteEndereco);
           }
         }
 
@@ -133,11 +141,14 @@ export default function HomeScreen() {
         };
       }));
       
-      setAppointments(formatados);
-      setManualAppointments(formatados);
+      if (isMounted) {
+        setAppointments(formatados);
+        setManualAppointments(formatados);
+      }
     };
 
     loadAppointmentsWithCoords();
+    return () => { isMounted = false; };
   }, [atendimentos]);
 
   useEffect(() => {
