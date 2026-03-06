@@ -404,7 +404,7 @@ export default function NewAtendScreen() {
     setShowResultModal(false);
     
     if (resultModal?.success) {
-      // Se foi sucesso, limpar formulário e ir para tela de atendimentos
+      // Se foi sucesso, limpar formulário e ir para Home diretamente
       setFormData({
         clienteNome: '',
         clienteId: '',
@@ -422,12 +422,10 @@ export default function NewAtendScreen() {
       });
       setSelectedEquipment(null);
       setSelectedStatus(STATUS_PADRAO);
-      setIsTimeEnabled(true); // Resetar estado da hora
+      setIsTimeEnabled(true);
       
-      // Voltar para a tela inicial (Home) limpando a pilha de navegação
-      while (router.canGoBack()) {
-        router.back();
-      }
+      // Voltar para Home usando replace (mais eficiente que múltiplos back())
+      router.replace('/');
     }
     
     setResultModal(null);

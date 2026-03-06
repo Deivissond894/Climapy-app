@@ -75,34 +75,48 @@ export const atendimentoService = {
       // Fazer POST
       const response: any = await apiService.post('/atendimentos', payload);
 
+      // Validar se a requisição foi bem-sucedida
+      if (!response.success) {
+        logger.error('Requisição de criar atendimento falhou', {
+          message: response.message,
+          error: response.error,
+          userId
+        });
+        
+        return {
+          success: false,
+          atendimento: null,
+          error: response.message || 'Erro ao criar atendimento no servidor',
+        };
+      }
+
       // Extrair dados do response
       // Backend retorna estrutura aninhada:
       // {
       //   data: {
-      //     codigo: "Atend-13",
-      //     data: { clienteNome, Produto, ... },
-      //     message: "...",
-      //     success: true
+      //     codigo: "ATD-0001",
+      //     clienteNome: "...",
+      //     ...
       //   },
-      //   success: true
+      //   success: true,
+      //   message: "Atendimento criado com sucesso!"
       // }
       
-      // Primeiro nível: response.data contém { codigo, data, message, success }
-      const firstLevel = response?.data || response;
+      const responseData = response?.data || response;
       
-      // Segundo nível: response.data.data contém o objeto real do atendimento
-      let rawAtendimento: AtendimentoRaw | undefined = firstLevel?.data;
+      // Se os dados vêm aninhados novamente, extrair
+      let rawAtendimento: AtendimentoRaw | undefined = responseData;
       
-      // Se firstLevel.data não tem clienteNome, pode ser que rawAtendimento está no lugar errado
-      if (!rawAtendimento || !rawAtendimento.clienteNome) {
-        rawAtendimento = response?.atendimento || firstLevel;
+      // Se tiver estrutura aninhada, extrair dados internos
+      if (responseData?.data && typeof responseData.data === 'object' && !Array.isArray(responseData.data)) {
+        rawAtendimento = responseData.data;
       }
 
-      // Se tiver codigo no firstLevel, adicionar ao objeto
-      if (firstLevel?.codigo && rawAtendimento && !rawAtendimento.codigo) {
+      // Se o backend retornou o código separado, adicionar ao objeto
+      if (responseData?.codigo && rawAtendimento && !rawAtendimento.codigo) {
         rawAtendimento = {
           ...rawAtendimento,
-          codigo: firstLevel.codigo,
+          codigo: responseData.codigo,
         };
       }
 
@@ -252,57 +266,49 @@ export const atendimentoService = {
     }
 
     const cacheKey = `atendimentos_${userId}`;
+    const novoId = extrairAtendimentoId(atendimento);
 
-    // Usar lock para evitar race condition
-    await lockManager.acquire(cacheKey, async () => {
+    if (!novoId) {
+      logger.warn('Atendimento sem ID, não sincronizando', { atendimento });
+      return;
+    }
+
+    try {
+      // Pegar lista atual do cache (sem lock para evitar travamento)
+      const cached = await cacheService.get<AtendimentoRaw[]>({
+        key: cacheKey,
+        ttl: 5 * 60,
+      });
+
+      const currentList = Array.isArray(cached) ? cached : [];
+      
+      // Filtrar duplicatas (remove se já existe com mesmo ID)
+      const filtrado = currentList.filter((item) => extrairAtendimentoId(item) !== novoId);
+
+      // Adicionar novo no topo
+      const updated = [atendimento, ...filtrado];
+
+      // Salvar no cache
+      await cacheService.set({ key: cacheKey, ttl: 5 * 60 }, updated as any);
+
+      // Atualizar store Zustand
+      const { setAtendimentos } = useDataStore.getState();
+      setAtendimentos(updated as any);
+    } catch (error: any) {
+      // Registrar erro mas não impedir a operação
+      logger.error('Erro ao sincronizar atendimento no cache', error, { userId });
+      
+      // Tentar atualizar store mesmo se cache falhar
       try {
-        // Pegar lista atual do cache
-        const cached = await cacheService.get<AtendimentoRaw[]>({
-          key: cacheKey,
-          ttl: 5 * 60,
-        });
-
-        const currentList = Array.isArray(cached) ? cached : [];
-        const novoId = extrairAtendimentoId(atendimento);
-
-        if (!novoId) {
-          logger.warn('Atendimento sem ID, não sincronizando', { atendimento });
-          return;
-        }
-
-        // Filtrar duplicatas (remove se já existe com mesmo ID)
-        const filtrado = currentList.filter((item) => extrairAtendimentoId(item) !== novoId);
-
-        // Adicionar novo no topo
+        const { setAtendimentos, atendimentos } = useDataStore.getState();
+        const currentList = Array.isArray(atendimentos) ? atendimentos : [];
+        const filtrado = currentList.filter((item: any) => extrairAtendimentoId(item) !== novoId);
         const updated = [atendimento, ...filtrado];
-
-        // Salvar no cache
-        await cacheService.set({ key: cacheKey, ttl: 5 * 60 }, updated as any);
-
-        // Atualizar store Zustand
-        const { setAtendimentos } = useDataStore.getState();
         setAtendimentos(updated as any);
-      } catch (cacheError: any) {
-        // Registrar erro mas não lançar - deixar que a operação continue
-        logger.error('Erro ao sincronizar atendimento no cache', cacheError, { userId });
-
-        // Tentar atualizar store mesmo se cache falhar
-        try {
-          const { setAtendimentos } = useDataStore.getState();
-          const normalizado = normalizarAtendimento(atendimento);
-          if (normalizado) {
-            const newList = [atendimento, ...((prevList: any) => {
-              return Array.isArray(prevList) ? prevList.filter(
-                (item: any) => extrairAtendimentoId(item) !== extrairAtendimentoId(atendimento)
-              ) : [];
-            })(useDataStore.getState().atendimentos)];
-            setAtendimentos(newList as any);
-          }
-        } catch (storeError: any) {
-          logger.error('Erro ao atualizar store após falha de cache', storeError as Error);
-        }
+      } catch (storeError: any) {
+        logger.error('Erro ao atualizar store após falha de cache', storeError as Error);
       }
-    });
+    }
   },
 
   /**

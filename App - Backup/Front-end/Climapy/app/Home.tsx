@@ -7,6 +7,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -66,6 +67,8 @@ export default function HomeScreen() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [routeSequence, setRouteSequence] = useState<string[]>([]);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   
   const backPressCount = useRef(0);
 
@@ -163,35 +166,15 @@ export default function HomeScreen() {
     }
   };
 
+  const openInGoogleMaps = (item: Appointment) => {
+    const dest = encodeURIComponent(item.address);
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${dest}`)
+      .catch(() => Alert.alert('Erro', 'Não foi possível abrir o Maps.'));
+  };
+
   const handleAppointmentOptions = (item: Appointment) => {
-    Alert.alert(
-      'Opções do Serviço',
-      `${item.order} - ${item.client}`,
-      [
-        { text: 'Reagendar', onPress: () => Alert.alert('Reagendar', 'Abrindo calendário para nova data...') },
-        { 
-          text: 'Apagar', 
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Confirmar exclusão',
-              'Tem certeza que deseja apagar este atendimento da tela inicial?',
-              [
-                { text: 'Não', style: 'cancel' },
-                { 
-                  text: 'Sim, Apagar', 
-                  style: 'destructive',
-                  onPress: () => {
-                    setAppointments(prev => prev.filter(apt => apt.id !== item.id));
-                  }
-                }
-              ]
-            );
-          }
-        },
-        { text: 'Cancelar', style: 'cancel' }
-      ]
-    );
+    setSelectedAppointment(item);
+    setShowOptionsModal(true);
   };
 
   const renderQuickAction = ({ item }: { item: QuickAction }) => (
@@ -225,17 +208,33 @@ export default function HomeScreen() {
 
   const getCardColor = (status: string) => {
     const s = status?.trim()?.toLowerCase() || '';
-    if (s.includes('aberto')) return '#FFE4E6'; // Vermelho/Rosa claro
-    if (s.includes('agendado')) return '#E0F2FE'; // Azul claro
-    if (s.includes('diagn')) return '#F3E8FF'; // Roxo claro (Diagnóstico)
-    if (s.includes('orç') || s.includes('orc')) return '#FFEDD5'; // Laranja claro (Orçamento)
-    if (s.includes('aprovado')) return '#DCFCE7'; // Verde claro
-    if (s.includes('peça') || s.includes('peca')) return '#FEF9C3'; // Amarelo claro (Aguardando Peça)
-    if (s.includes('execu')) return '#E0E7FF'; // Indigo claro (Em Execução)
-    if (s.includes('conclu')) return '#D1FAE5'; // Verde esmeralda (Concluído)
-    if (s.includes('garantia')) return '#FEF3C7'; // Amarelo/Laranja claro
-    if (s.includes('cancelado')) return '#F3F4F6'; // Cinza claro
-    return '#FFFFFF';
+
+    // Mapeamento de cores alinhado com os-panel.tsx (STATUS_COLORS com versão pastel)
+    // Diagnóstico: #3B82F6 -> Pastel: #DBEAFE
+    if (s.includes('diagn') || s.includes('novo')) return '#DBEAFE'; // Azul Pastel
+    
+    // Sob Consulta: #F97316 -> Pastel: #FFEDD5
+    if (s.includes('consulta') || s.includes('orç') || s.includes('orc')) return '#FFEDD5'; // Laranja Pastel
+    
+    // Aguardando: #F59E0B -> Pastel: #FEF3C7
+    if (s.includes('aguard') || s.includes('peça') || s.includes('peca')) return '#FEF3C7'; // Amarelo Pastel
+    
+    // Aprovado: #10B981 -> Pastel: #D1FAE5
+    if (s.includes('aprovado') || s.includes('agendado')) return '#D1FAE5'; // Verde Pastel
+    
+    // Recusado: #EF4444 -> Pastel: #FEE2E2
+    if (s.includes('recusado') || s.includes('cancelado')) return '#FEE2E2'; // Vermelho Pastel
+    
+    // Executado: #8B5CF6 -> Pastel: #EDE9FE
+    if (s.includes('execu') || s.includes('andamento')) return '#EDE9FE'; // Roxo Pastel
+    
+    // Garantia: #06B6D4 -> Pastel: #CCFBF1
+    if (s.includes('garantia') || s.includes('deslocamento')) return '#CCFBF1'; // Ciano Pastel
+    
+    // Aberto/padrão
+    if (s === 'aberto') return '#E0F2FE'; // Azul Céu
+
+    return '#F8FAFC'; // Cor padrão (cinza quase branco)
   };
 
   const renderAppointmentCard = ({ item }: { item: Appointment }) => (
@@ -363,6 +362,45 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
+      {/* Modal de Opções do Cartão */}
+      <Modal visible={showOptionsModal} transparent={true} animationType="slide" onRequestClose={() => setShowOptionsModal(false)}>
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.optionsModalCard}>
+            <View style={styles.optionsHeader}>
+              <Text style={styles.optionsModalTitle}>Opções do Serviço</Text>
+              <Text style={styles.optionsModalSubtitle}>{selectedAppointment?.order} - {selectedAppointment?.client}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.optionButton} onPress={() => { setShowOptionsModal(false); if (selectedAppointment) openInGoogleMaps(selectedAppointment); }}>
+              <View style={[styles.iconWrapper, { backgroundColor: '#E0F2FE' }]}><Ionicons name="map-outline" size={24} color="#1BAFE0" /></View>
+              <Text style={styles.optionButtonText}>Navegar no Maps</Text>
+              <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.optionButton} onPress={() => { setShowOptionsModal(false); Alert.alert('Reagendar', 'Abrindo calendário...'); }}>
+              <View style={[styles.iconWrapper, { backgroundColor: '#F3E8FF' }]}><Ionicons name="calendar-outline" size={24} color="#7902E0" /></View>
+              <Text style={styles.optionButtonText}>Reagendar</Text>
+              <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.optionButton} onPress={() => {
+              setShowOptionsModal(false);
+              Alert.alert('Confirmar', 'Deseja ocultar este atendimento da tela?', [
+                { text: 'Não', style: 'cancel' },
+                { text: 'Sim', style: 'destructive', onPress: () => setAppointments(p => p.filter(a => a.id !== selectedAppointment?.id)) }
+              ]);
+            }}>
+              <View style={[styles.iconWrapper, { backgroundColor: '#FFE4E6' }]}><Ionicons name="trash-outline" size={24} color="#FF4444" /></View>
+              <Text style={[styles.optionButtonText, { color: '#FF4444' }]}>Apagar da Tela</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.closeOptionButton} onPress={() => setShowOptionsModal(false)}>
+              <Text style={styles.closeOptionText}>Voltar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Floating Action Button */}
       <TouchableOpacity style={styles.fab} onPress={() => setShowFloatingMenu(!showFloatingMenu)}>
         <LinearGradient colors={['#1BAFE0', '#7902E0']} style={styles.fabGradient}>
@@ -432,4 +470,14 @@ const styles = StyleSheet.create({
   floatingMenu: { backgroundColor: '#fff', borderRadius: 15, padding: 10, minWidth: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 15 },
   menuText: { marginLeft: 15, fontSize: 16, color: '#333', fontWeight: '500' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  optionsModalCard: { backgroundColor: '#fff', borderRadius: 24, width: '100%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 },
+  optionsHeader: { borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 15, marginBottom: 15 },
+  optionsModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1A32E5', textAlign: 'center', marginBottom: 5 },
+  optionsModalSubtitle: { fontSize: 14, color: '#666', textAlign: 'center' },
+  optionButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, marginBottom: 10 },
+  iconWrapper: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  optionButtonText: { flex: 1, fontSize: 16, fontWeight: '600', color: '#333' },
+  closeOptionButton: { marginTop: 10, paddingVertical: 15, backgroundColor: '#F3F4F6', borderRadius: 12, alignItems: 'center' },
+  closeOptionText: { fontSize: 16, fontWeight: 'bold', color: '#666' },
 });

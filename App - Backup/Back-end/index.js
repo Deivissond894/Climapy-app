@@ -48,6 +48,22 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Endpoint de debug para verificar o token sendo enviado
+app.post('/debug/token', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  
+  res.json({
+    authHeader: authHeader || 'NENHUM',
+    token: token ? `${token.substring(0, 100)}...${token.substring(Math.max(0, token.length - 50))}` : 'NENHUM',
+    tokenLength: token?.length || 0,
+    headers: {
+      'content-type': req.headers['content-type'],
+      'authorization': req.headers.authorization ? 'PRESENTE' : 'AUSENTE'
+    }
+  });
+});
+
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -57,9 +73,10 @@ app.get('/', (req, res) => {
     endpoints: {
       auth: { signup: 'POST /auth/signup', login: 'POST /auth/login', forgotPassword: 'POST /auth/forgot-password', profile: 'GET /auth/profile' },
       clients: { create: 'POST /clientes', list: 'GET /clientes/:uid', update: 'PUT /clientes/:uid/:clientId', delete: 'DELETE /clientes/:uid/:clientId' },
-      atendimentos: { create: 'POST /atendimentos/:uid', list: 'GET /atendimentos/:uid', get: 'GET /atendimentos/:uid/:atendimentoId', update: 'PUT /atendimentos/:uid/:atendimentoId', updateOrcamento: 'PUT /atendimentos/:atendimentoId/orcamento', delete: 'DELETE /atendimentos/:uid/:atendimentoId' },
+      atendimentos: { create: 'POST /atendimentos', list: 'GET /atendimentos', get: 'GET /atendimentos/:atendimentoId', update: 'PUT /atendimentos/:atendimentoId', updateOrcamento: 'PUT /atendimentos/:atendimentoId/orcamento', delete: 'DELETE /atendimentos/:atendimentoId' },
       ai: { processAudio: 'POST /ai/process-audio', status: 'GET /ai/status' },
-      upload: { uploadOrcamento: 'POST /upload/orcamento', deleteOrcamento: 'DELETE /upload/orcamento/:publicId', status: 'GET /upload/status' }
+      upload: { uploadOrcamento: 'POST /upload/orcamento', deleteOrcamento: 'DELETE /upload/orcamento/:publicId', status: 'GET /upload/status' },
+      debug: { token: 'POST /debug/token' }
     }
   });
 });

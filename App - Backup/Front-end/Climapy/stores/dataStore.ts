@@ -50,7 +50,7 @@ export const useDataStore = create<DataStore>()(
 
         try {
           const [atendimentosRes, clientesRes] = await Promise.all([
-            apiService.get(`/atendimentos/${userId}`),
+            apiService.get(`/atendimentos`),
             apiService.get(`/clientes/${userId}`)
           ]);
 

@@ -176,47 +176,66 @@ export default function OsPanelScreen() {
           setOrders(mappedFromCache);
           setLoading(false);
           setRefreshing(false);
+          logger.info('Atendimentos carregados do cache', { count: mappedFromCache.length });
           return;
         }
       }
 
       const response: any = await apiService.get(`/atendimentos`);
       
-      // Validar e extrair atendimentos
-      // O backend retorna: { success, count, data: [...] }
+      // Validar resposta da API
+      if (!response.success) {
+        logger.error('API retornou erro', {
+          success: response.success,
+          message: response.message,
+          status: response.error
+        });
+        
+        // Se não tem dados disponíveis, apenas mostrar lista vazia
+        setOrders([]);
+        setError(null);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      // Validar e extrair atendimentos - o backend retorna { success, count, data: [...] }
       let atendimentos: any[] = [];
       
       if (Array.isArray(response.data)) {
         atendimentos = response.data;
       } else if (response.data && Array.isArray(response.data.data)) {
         atendimentos = response.data.data;
-      } else if (Array.isArray(response.atendimentos)) {
-        atendimentos = response.atendimentos;
+      } else if (response.data && typeof response.data === 'object' && Array.isArray(response.data.atendimentos)) {
+        atendimentos = response.data.atendimentos;
       }
       
-      // Garantir que é um array
-      if (!Array.isArray(atendimentos)) {
-        logger.warn('Dados inválidos recebidos da API');
+      // Se encontrou dados, processar
+      if (Array.isArray(atendimentos) && atendimentos.length > 0) {
+        // Mapear e filtrar atendimentos
+        const mappedOrders = atendimentos
+          .map(mapAtendimentoToOrder)
+          .filter((order): order is Order => order !== null);
+        
+        setOrders(mappedOrders);
+        
+        // Salvar no cache por 5 minutos
+        await cacheService.set({ key: cacheKey, ttl: cacheTTL }, atendimentos);
+        
+        logger.info('Atendimentos carregados da API', { count: mappedOrders.length });
+      } else {
+        // Se não tiver dados mas a requisição foi bem-sucedida
         setOrders([]);
-        setLoading(false);
-        setRefreshing(false);
-        return;
+        logger.info('Nenhum atendimento encontrado');
       }
-      
-      // Mapear e filtrar atendimentos
-      const mappedOrders = atendimentos
-        .map(mapAtendimentoToOrder)
-        .filter((order): order is Order => order !== null);
-      
-      setOrders(mappedOrders);
-      
-      // Salvar no cache por 5 minutos
-      await cacheService.set({ key: cacheKey, ttl: cacheTTL }, atendimentos);
       
     } catch (error: any) {
       logger.error('Erro ao buscar atendimentos', error, { 
         userId: user?.id 
       });
+      
+      // Limpar cache se houver erro
+      await cacheService.invalidate(`atendimentos_${user.id}`);
       
       setError('Erro ao carregar atendimentos. Tente novamente.');
       
@@ -369,6 +388,22 @@ export default function OsPanelScreen() {
   const closeMenu = () => {
     setMenuOrder(null);
     setMenuVisible(false);
+  };
+
+  const openGoogleMaps = (address: string) => {
+    if (!address || address === 'Endereço não informado') {
+      Alert.alert('Aviso', 'Endereço não informado para esta O.S.');
+      return;
+    }
+
+    const encodedAddress = encodeURIComponent(address);
+    const googleMapsUrl = `https://www.google.com/maps/search/${encodedAddress}`;
+    
+    Linking.openURL(googleMapsUrl).catch(() => {
+      Alert.alert('Erro', 'Não foi possível abrir o Google Maps');
+    });
+    
+    closeMenu();
   };
 
   const deleteOrder = async (orderId: string) => {
@@ -787,7 +822,7 @@ export default function OsPanelScreen() {
         </Pressable>
       )}
 
-      {/* Menu modal for three-dots */}
+      {/* Menu modal for three-dots - incluindo Google Maps e botão Voltar */}
       {menuVisible && menuOrder && (
         <Pressable style={styles.fullScreenOverlay} onPress={() => closeMenu()}>
           <View style={[styles.actionMenu, { 
@@ -813,12 +848,30 @@ export default function OsPanelScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => openGoogleMaps(menuOrder.address)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="location-outline" size={18} color="#111" />
+              <Text style={styles.actionText}>Ver localização no Mapa</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.actionItem, styles.actionItemDanger]}
               onPress={() => setConfirmDeleteOrder(menuOrder)}
               activeOpacity={0.7}
             >
               <Ionicons name="trash-outline" size={18} color="red" />
               <Text style={[styles.actionText, styles.actionTextDanger]}>Excluir atendimento</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => closeMenu()}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back-outline" size={18} color="#666" />
+              <Text style={[styles.actionText, { color: '#666' }]}>Voltar</Text>
             </TouchableOpacity>
           </View>
         </Pressable>

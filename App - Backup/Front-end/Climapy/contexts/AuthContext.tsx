@@ -45,6 +45,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loadStoredData();
   }, []);
 
+  // Configurar callback para erros de autenticação
+  useEffect(() => {
+    apiService.setOnAuthError(() => {
+      logger.warn('Erro de autenticação detectado - limpando sessão');
+      logout();
+    });
+  }, []);
+
   const loadStoredData = async () => {
     try {
       setIsLoading(true);

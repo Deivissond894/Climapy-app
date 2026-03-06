@@ -53,12 +53,20 @@ export interface GoogleSignInRequest {
 class ApiService {
   private baseUrl: string;
   private defaultHeaders: HeadersInit;
+  private onAuthError?: () => void;
 
   constructor() {
     this.baseUrl = API_BASE_URL;
     this.defaultHeaders = {
       'Content-Type': 'application/json',
     };
+  }
+
+  /**
+   * Configurar callback para erros de autenticação
+   */
+  setOnAuthError(callback: () => void): void {
+    this.onAuthError = callback;
   }
 
   /**
@@ -131,6 +139,19 @@ class ApiService {
           data,
         };
       } else {
+        // Tratar erros de autenticação
+        if (response.status === 401 || response.status === 403) {
+          logger.warn('Erro de autenticação', {
+            status: response.status,
+            endpoint,
+          });
+          
+          // Chamar callback se configurado
+          if (this.onAuthError) {
+            this.onAuthError();
+          }
+        }
+
         logger.warn('API retornou erro', {
           status: response.status,
           endpoint,
@@ -225,7 +246,7 @@ class ApiService {
   async get<T>(endpoint: string, headers?: HeadersInit): Promise<ApiResponse<T>> {
     return this.makeRequest<T>(endpoint, {
       method: 'GET',
-      headers,
+      headers: { ...this.defaultHeaders, ...headers },
     });
   }
 
@@ -244,9 +265,19 @@ class ApiService {
     // (o navegador/Expo faz isso automaticamente)
     const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
     const body = isFormData ? data : data ? JSON.stringify(data) : undefined;
-    const requestHeaders = isFormData 
-      ? headers  // Para FormData, deixar vazio para o navegador adicionar o boundary
-      : { ...this.defaultHeaders, ...headers }; // Para JSON, usar default
+    
+    // Para FormData, manter o Authorization header mas deixar Content-Type vazio
+    // Para o navegador adicionar o boundary automaticamente
+    let requestHeaders: HeadersInit;
+    if (isFormData) {
+      const authHeader = (this.defaultHeaders as any).Authorization;
+      requestHeaders = {
+        ...headers,
+        ...(authHeader && { Authorization: authHeader })
+      };
+    } else {
+      requestHeaders = { ...this.defaultHeaders, ...headers };
+    }
 
     return this.makeRequest<T>(endpoint, {
       method: 'POST',
@@ -266,7 +297,7 @@ class ApiService {
     return this.makeRequest<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
-      headers,
+      headers: { ...this.defaultHeaders, ...headers },
     });
   }
 
@@ -276,7 +307,7 @@ class ApiService {
   async delete<T>(endpoint: string, headers?: HeadersInit): Promise<ApiResponse<T>> {
     return this.makeRequest<T>(endpoint, {
       method: 'DELETE',
-      headers,
+      headers: { ...this.defaultHeaders, ...headers },
     });
   }
 }
