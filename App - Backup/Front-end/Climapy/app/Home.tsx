@@ -61,7 +61,7 @@ const quickActions: QuickAction[] = [
 export default function HomeScreen() {
   const router = useRouter();
   const { logout, user } = useAuth();
-  const { atendimentos, fetchData } = useDataStore();
+  const { atendimentos, fetchData, fetchAtendimentosCached, getAtendimentosHoje } = useDataStore();
   
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -92,18 +92,50 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Prefetch a limited set (20) and populate cache for fast Home render
+      try {
+        fetchAtendimentosCached(user.id, 20);
+      } catch (e) {
+        console.warn('Erro ao buscar atendimentos cacheados:', e);
+      }
+
+      // Keep full fetch for background sync (optional)
+      // fetchData(user.id);
     }
   }, [user?.id]);
 
   useEffect(() => {
     const loadAppointmentsWithCoords = async () => {
-      if (!atendimentos || atendimentos.length === 0) {
+      // Priorizar atendimentos do dia via cache
+      const todays = getAtendimentosHoje ? getAtendimentosHoje() : [];
+
+      // Se não encontrou no cache, filtrar o array principal por data (data ou criadoEm)
+      let sourceList: any[] = [];
+      if (todays && todays.length > 0) {
+        sourceList = todays;
+      } else if (Array.isArray(atendimentos) && atendimentos.length > 0) {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+
+        sourceList = atendimentos.filter((a: any) => {
+          try {
+            const d = a?.data ? new Date(a.data) : a?.criadoEm ? new Date(a.criadoEm) : null;
+            if (!d) return false;
+            return d >= start && d <= end;
+          } catch (e) {
+            return false;
+          }
+        });
+      }
+
+      if (!sourceList || sourceList.length === 0) {
         setAppointments([]);
         return;
       }
 
-      const formatados = await Promise.all(atendimentos.map(async (atend: any, index: number) => {
+      const formatados = await Promise.all(sourceList.map(async (atend: any, index: number) => {
         // Coordenada padrão (caso o endereço não seja encontrado)
         let lat = -23.5505 - (index * 0.01);
         let lng = -46.6333 - (index * 0.01);
@@ -353,12 +385,34 @@ export default function HomeScreen() {
         {/* Today's Appointments */}
         <View style={styles.appointmentsContainer}>
           <Text style={styles.sectionTitle}>ATENDIMENTOS - HOJE</Text>
-          <FlatList
-            data={appointments}
-            renderItem={renderAppointmentCard}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
+          {appointments.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyTitle}>Nenhum atendimento hoje!</Text>
+              <Text style={styles.emptySubtitle}>Toque em atualizar para buscar novamente os atendimentos do dia.</Text>
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={async () => {
+                  if (!user?.id) return;
+                  try {
+                    await fetchAtendimentosCached(user.id, 20, true);
+                  } catch (e) {
+                    console.warn('Erro ao atualizar atendimentos:', e);
+                  }
+                }}
+              >
+                <LinearGradient colors={["#1BAFE0", "#7902E0"]} style={styles.refreshButtonGradient}>
+                  <Text style={styles.refreshButtonText}>Atualizar</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={appointments}
+              renderItem={renderAppointmentCard}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -480,4 +534,10 @@ const styles = StyleSheet.create({
   optionButtonText: { flex: 1, fontSize: 16, fontWeight: '600', color: '#333' },
   closeOptionButton: { marginTop: 10, paddingVertical: 15, backgroundColor: '#F3F4F6', borderRadius: 12, alignItems: 'center' },
   closeOptionText: { fontSize: 16, fontWeight: 'bold', color: '#666' },
+  emptyContainer: { alignItems: 'center', paddingVertical: 30 },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 16, paddingHorizontal: 20 },
+  refreshButton: { width: 160, borderRadius: 12, overflow: 'hidden' },
+  refreshButtonGradient: { paddingVertical: 12, alignItems: 'center' },
+  refreshButtonText: { color: '#fff', fontWeight: 'bold' },
 });

@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams , useFocusEffect } from 'expo-router';
+
 import { AirVent, CirclePlus, Heater, Refrigerator, WashingMachine } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -122,7 +122,7 @@ export default function NewAtendScreen() {
         clienteEndereco: (params.clienteEndereco as string) || '',
       }));
     }
-  }, [params.clienteCodigo, params.clienteNome, params.clienteCPF, params.clienteTelefone, params.clienteEmail, params.clienteEndereco]);
+  }, [params.clienteId, params.clienteCodigo, params.clienteNome, params.clienteCPF, params.clienteTelefone, params.clienteEmail, params.clienteEndereco]);
 
   // Formatar data para DD/MM/AAAA
   const formatDate = (date: Date): string => {

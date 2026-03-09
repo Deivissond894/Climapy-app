@@ -355,7 +355,7 @@ export default function OrcamentosPanelScreen() {
         <View style={styles.emptyContainer}>
           <Ionicons name="document-text-outline" size={64} color="#ccc" />
           <Text style={styles.emptyText}>Nenhum orçamento encontrado</Text>
-          <Text style={styles.emptySubtext}>Orçamentos aparecem quando atendimentos estiverem "Sob Consulta"</Text>
+          <Text style={styles.emptySubtext}>Orçamentos aparecem quando atendimentos estiverem &quot;Sob Consulta&quot;</Text>
         </View>
       );
     }

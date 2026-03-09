@@ -51,8 +51,8 @@ const ServicePanel: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDetalhesModal, setShowDetalhesModal] = useState(false);
 
-  // Dados mockados para demonstração (posteriormente integrar com API)
-  const servicosMock: Servico[] = [
+// Dados mockados para demonstração (posteriormente integrar com API)
+const servicosMock: Servico[] = [
     {
       id: '1',
       codigo: 'SRV001',
@@ -92,7 +92,7 @@ const ServicePanel: React.FC = () => {
   ];
 
   // Função para buscar serviços (mockada - posteriormente integrar com API)
-  const fetchServicos = async () => {
+  const fetchServicos = useCallback(async () => {
     if (!user?.id) {
       setError('Usuário não autenticado');
       setIsLoading(false);
@@ -115,18 +115,18 @@ const ServicePanel: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id, servicosMock]);
 
   // useEffect para carregar serviços ao montar o componente
   useEffect(() => {
     fetchServicos();
-  }, [user?.id]);
+  }, [fetchServicos]);
 
   // useFocusEffect para atualizar os dados sempre que a tela ganhar foco
   useFocusEffect(
     useCallback(() => {
       fetchServicos();
-    }, [user?.id])
+    }, [fetchServicos])
   );
 
   // Função para abrir/fechar menu de ações do serviço

@@ -342,4 +342,70 @@ export const atendimentoService = {
     await cacheService.invalidate(cacheKey);
     logger.info('Cache de atendimentos limpo', { cacheKey });
   },
+  
+  /**
+   * Listar atendimentos com limite - tenta endpoint com limit e faz fallback
+   */
+  async listarAtendimentos(limit = 20, userId?: string): Promise<AtendimentoRaw[]> {
+    try {
+      // Se tiver userId, usar endpoint específico do usuário
+      let resp: any;
+      if (userId) {
+        resp = await apiService.get(`/atendimentos/${userId}?limit=${limit}`);
+      } else {
+        // Tentar endpoint com limit (backend pode suportar query string)
+        resp = await apiService.get(`/atendimentos?limit=${limit}`);
+      }
+      let arr: any[] = [];
+      if (Array.isArray(resp?.data)) arr = resp.data;
+      else if (Array.isArray(resp?.data?.data)) arr = resp.data.data;
+      else if (Array.isArray(resp?.atendimentos)) arr = resp.atendimentos;
+      else if (Array.isArray(resp)) arr = resp;
+
+      if (arr.length > 0) return arr.slice(0, limit);
+    } catch (err) {
+      logger.warn('listarAtendimentos: fallback para buscar todos', err as Error);
+    }
+
+    // Fallback: buscar todos e retornar os primeiros
+    try {
+      // Fallback: buscar todos (ou todos do usuário se userId informado)
+      const allResp: any = userId ? await apiService.get(`/atendimentos/${userId}`) : await apiService.get('/atendimentos');
+      let arr: any[] = [];
+      if (Array.isArray(allResp?.data)) arr = allResp.data;
+      else if (Array.isArray(allResp?.data?.data)) arr = allResp.data.data;
+      else if (Array.isArray(allResp?.atendimentos)) arr = allResp.atendimentos;
+      else if (Array.isArray(allResp)) arr = allResp;
+
+      return arr.slice(0, limit);
+    } catch (err) {
+      logger.error('Erro ao listar atendimentos (fallback)', err as Error);
+      return [];
+    }
+  },
+
+  /**
+   * Listar apenas os atendimentos do dia (usa listarAtendimentos e filtra)
+   */
+  async listarAtendimentosHoje(limit = 100, userId?: string): Promise<AtendimentoRaw[]> {
+    const items = await this.listarAtendimentos(limit, userId);
+    if (!Array.isArray(items) || items.length === 0) return [];
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    const filtered = items.filter((a) => {
+      try {
+        const d = a?.data ? new Date(a.data) : a?.criadoEm ? new Date(a.criadoEm) : null;
+        if (!d) return false;
+        return d >= start && d <= end;
+      } catch (e) {
+        return false;
+      }
+    });
+
+    return filtered;
+  },
 };

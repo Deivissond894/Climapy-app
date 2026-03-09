@@ -61,7 +61,7 @@ const ClientPanel: React.FC = () => {
   const debouncedQuery = useDebounce(query, 300);
 
   // Função para buscar clientes da API com cache
-  const fetchClientes = async (forceRefresh = false) => {
+  const fetchClientes = useCallback(async (forceRefresh = false) => {
     if (!user?.id) {
       setError('Usuário não autenticado');
       setIsLoading(false);
@@ -100,10 +100,10 @@ const ClientPanel: React.FC = () => {
       setIsLoading(false);
       metrics.trackTime('fetch_clientes', startTime);
     }
-  };
+  }, [user?.id, fetchClientesFromServer]);
 
   // Função auxiliar para buscar do servidor
-  const fetchClientesFromServer = async () => {
+  const fetchClientesFromServer = useCallback(async () => {
     if (!user?.id) return;
 
     const response = await fetch(`https://back-end-restless-darkness-2411.fly.dev/clientes/${user.id}`);
@@ -124,19 +124,19 @@ const ClientPanel: React.FC = () => {
     } else {
       setClientes([]);
     }
-  };
+  }, [user?.id]);
 
   // useEffect para carregar clientes ao montar o componente
   useEffect(() => {
     fetchClientes();
-  }, [user?.id]);
+  }, [fetchClientes]);
 
   // useFocusEffect para atualizar os dados sempre que a tela ganhar foco
   useFocusEffect(
     useCallback(() => {
       // Recarregar dados quando a tela ganhar foco
       fetchClientes();
-    }, [user?.id])
+    }, [fetchClientes])
   );
 
   // Função para abrir/fechar menu de ações do cliente

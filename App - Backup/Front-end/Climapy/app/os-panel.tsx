@@ -45,7 +45,7 @@ interface Order {
 export default function OsPanelScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { atendimentos, isLoading: storeLoading, fetchData } = useDataStore();
+  const { atendimentos, isLoading: storeLoading, fetchToday } = useDataStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,7 +150,7 @@ export default function OsPanelScreen() {
   };
 
   // Função para buscar atendimentos da API
-  const fetchAtendimentos = async (useCache = true) => {
+  const fetchAtendimentos = useCallback(async (useCache = true) => {
     if (!user?.id) {
       logger.warn('Tentativa de buscar atendimentos sem usuário autenticado');
       setError('Usuário não autenticado');
@@ -243,12 +243,12 @@ export default function OsPanelScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [user?.id]);
 
   // Carregar atendimentos ao montar o componente
   useEffect(() => {
     fetchAtendimentos();
-  }, [user?.id]);
+  }, [fetchAtendimentos]);
 
   // Handler para voltar para Home
   useFocusEffect(
@@ -263,7 +263,7 @@ export default function OsPanelScreen() {
         const subscription = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
         return () => subscription.remove();
       }
-    }, [])
+    }, [router])
   );
 
   // Sincronizar quando store Zustand mudar
@@ -283,10 +283,20 @@ export default function OsPanelScreen() {
   // Recarregar atendimentos quando a tela for focada
   useFocusEffect(
     useCallback(() => {
-      if (user?.id) {
-        // Usar dados do store Zustand primeiro
+      let mounted = true;
+      (async () => {
+        if (!user?.id) return;
+
+        // trigger a background refresh of today's atendimentos (force)
+        try {
+          await fetchToday(user.id, true);
+        } catch (e) {
+          // ignore
+        }
+
+        // then prefer store data for immediate UI
         const storeAtendimentos = useDataStore.getState().atendimentos;
-        if (Array.isArray(storeAtendimentos) && storeAtendimentos.length > 0) {
+        if (mounted && Array.isArray(storeAtendimentos) && storeAtendimentos.length > 0) {
           const mapped = storeAtendimentos
             .map(mapAtendimentoToOrder)
             .filter((order): order is Order => order !== null);
@@ -294,11 +304,13 @@ export default function OsPanelScreen() {
           setLoading(false);
           return;
         }
-        
-        // Se store vazio, buscar da API
+
+        // fallback to API fetch if store empty
         fetchAtendimentos(true);
-      }
-    }, [user?.id])
+      })();
+
+      return () => { mounted = false; };
+    }, [user?.id, fetchAtendimentos, fetchToday])
   );
 
   // Função para atualizar atendimento
