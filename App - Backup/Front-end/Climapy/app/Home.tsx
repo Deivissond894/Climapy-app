@@ -18,6 +18,7 @@ import {
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../contexts/AuthContext';
 import { useDataStore } from '../stores/dataStore';
 import MapView, { Marker } from 'react-native-maps';
@@ -45,6 +46,7 @@ interface Appointment {
   order: string;
   latitude?: number;
   longitude?: number;
+  date?: string;
 }
 
 const quickActions: QuickAction[] = [
@@ -69,11 +71,31 @@ export default function HomeScreen() {
   const [routeSequence, setRouteSequence] = useState<string[]>([]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [startFilterDate, setStartFilterDate] = useState(new Date());
+  const [endFilterDate, setEndFilterDate] = useState(new Date());
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [useRangeFilter, setUseRangeFilter] = useState(false);
   
   const backPressCount = useRef(0);
 
   useFocusEffect(
     useCallback(() => {
+      // Resetar filtro para hoje quando volta para Home
+      const today = new Date();
+      setStartFilterDate(today);
+      setEndFilterDate(today);
+      setUseRangeFilter(false);
+      
+      // Recarregar dados ao entrar na Home
+      if (user?.id) {
+        try {
+          fetchAtendimentosCached(user.id, 100, true); // Force refresh
+        } catch (e) {
+          console.warn('Erro ao buscar atendimentos:', e);
+        }
+      }
+      
       const backAction = () => {
         if (backPressCount.current === 0) {
           backPressCount.current = 1;
@@ -87,7 +109,7 @@ export default function HomeScreen() {
       };
       const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
       return () => backHandler.remove();
-    }, [])
+    }, [user?.id, fetchAtendimentosCached])
   );
 
   useEffect(() => {
@@ -104,31 +126,79 @@ export default function HomeScreen() {
     }
   }, [user?.id]);
 
+  // Buscar atendimentos quando a data filtro mudar
+  useEffect(() => {
+    if (user?.id) {
+      try {
+        fetchAtendimentosCached(user.id, 100, true); // Force refresh
+      } catch (e) {
+        console.warn('Erro ao buscar atendimentos:', e);
+      }
+    }
+  }, [user?.id, fetchAtendimentosCached]);
+
   useEffect(() => {
     const loadAppointmentsWithCoords = async () => {
-      // Priorizar atendimentos do dia via cache
-      const todays = getAtendimentosHoje ? getAtendimentosHoje() : [];
+      // Filtrar por intervalo de datas ou dia único
+      const filterStartDate = new Date(startFilterDate.getFullYear(), startFilterDate.getMonth(), startFilterDate.getDate(), 0, 0, 0, 0);
+      const filterEndDate = new Date(endFilterDate.getFullYear(), endFilterDate.getMonth(), endFilterDate.getDate(), 23, 59, 59, 999);
 
-      // Se não encontrou no cache, filtrar o array principal por data (data ou criadoEm)
+      const startTime = filterStartDate.getTime();
+      const endTime = filterEndDate.getTime();
+
+      console.log('🔍 Filtro de data:', { start: formatDisplayDate(startFilterDate), end: formatDisplayDate(endFilterDate) });
+      console.log('📊 Total de atendimentos disponíveis:', Array.isArray(atendimentos) ? atendimentos.length : 0);
+
       let sourceList: any[] = [];
-      if (todays && todays.length > 0) {
-        sourceList = todays;
-      } else if (Array.isArray(atendimentos) && atendimentos.length > 0) {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        const end = new Date();
-        end.setHours(23, 59, 59, 999);
-
+      if (Array.isArray(atendimentos) && atendimentos.length > 0) {
         sourceList = atendimentos.filter((a: any) => {
           try {
-            const d = a?.data ? new Date(a.data) : a?.criadoEm ? new Date(a.criadoEm) : null;
-            if (!d) return false;
-            return d >= start && d <= end;
+            let d: Date | null = null;
+            
+            // Tentar diferentes formatos de data
+            if (a?.data) {
+              const dataStr = String(a.data).trim();
+              
+              // Formato ISO (2026-03-10T...)
+              if (dataStr.includes('T') || dataStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+                d = new Date(dataStr);
+              } 
+              // Formato DD/MM/YYYY
+              else if (dataStr.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+                const parts = dataStr.split('/');
+                const day = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10);
+                const year = parseInt(parts[2], 10);
+                d = new Date(year, month - 1, day, 12, 0, 0);
+              }
+            } 
+            // Fallback para criadoEm
+            else if (a?.criadoEm) {
+              d = new Date(a.criadoEm);
+            }
+            
+            if (!d || isNaN(d.getTime())) {
+              console.log('❌ Data inválida:', a?.data);
+              return false;
+            }
+            
+            // Comparar usando timestamps (números)
+            const dTime = d.getTime();
+            const matches = dTime >= startTime && dTime <= endTime;
+            
+            if (matches) {
+              console.log('✅ Atendimento incluído:', a?.codigo, 'Data:', formatDisplayDate(d));
+            }
+            
+            return matches;
           } catch (e) {
+            console.log('💥 Erro ao filtrar data:', a?.data, e);
             return false;
           }
         });
       }
+
+      console.log('📌 Atendimentos após filtro:', sourceList.length);
 
       if (!sourceList || sourceList.length === 0) {
         setAppointments([]);
@@ -162,6 +232,7 @@ export default function HomeScreen() {
           order: atend.codigo || `PEDIDO-${index + 1}`,
           latitude: lat,
           longitude: lng,
+          date: atend.data,
         };
       }));
       
@@ -169,7 +240,7 @@ export default function HomeScreen() {
     };
 
     loadAppointmentsWithCoords();
-  }, [atendimentos]);
+  }, [atendimentos, startFilterDate, endFilterDate]);
 
   useEffect(() => {
     (async () => {
@@ -207,6 +278,51 @@ export default function HomeScreen() {
   const handleAppointmentOptions = (item: Appointment) => {
     setSelectedAppointment(item);
     setShowOptionsModal(true);
+  };
+
+  const handleStartDateChange = (event: any, selected?: Date) => {
+    setShowStartDatePicker(false);
+    if (selected) {
+      setStartFilterDate(selected);
+      // Se estiver em modo "Dia", ajusta endFilterDate para a mesma data
+      if (!useRangeFilter) {
+        setEndFilterDate(selected);
+      } else if (selected > endFilterDate) {
+        // Se data de início for maior que fim (modo intervalo), ajusta fim também
+        setEndFilterDate(selected);
+      }
+    }
+  };
+
+  const handleEndDateChange = (event: any, selected?: Date) => {
+    setShowEndDatePicker(false);
+    if (selected) {
+      setEndFilterDate(selected);
+    }
+  };
+
+  const formatDisplayDate = (date: Date): string => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const formatDisplayDateShort = (dateStr?: string): string => {
+    if (!dateStr) return '-';
+    try {
+      let d: Date | null = null;
+      if (dateStr.includes('T') || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+        d = new Date(dateStr);
+      } else if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+      }
+      if (!d || isNaN(d.getTime())) return '-';
+      return formatDisplayDate(d);
+    } catch {
+      return '-';
+    }
   };
 
   const renderQuickAction = ({ item }: { item: QuickAction }) => (
@@ -290,6 +406,7 @@ export default function HomeScreen() {
       </View>
       <Text style={styles.appointmentClient}>{item.client}</Text>
       <Text style={styles.appointmentAddress}>{item.address}</Text>
+      <Text style={styles.appointmentDate}>📅 {formatDisplayDateShort(item.date)}</Text>
       <View style={styles.appointmentFooter}>
         <Text style={styles.appointmentTime}>⏰ {item.time}</Text>
         <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 255, 255, 0.6)' }]}>
@@ -384,11 +501,55 @@ export default function HomeScreen() {
 
         {/* Today's Appointments */}
         <View style={styles.appointmentsContainer}>
-          <Text style={styles.sectionTitle}>ATENDIMENTOS - HOJE</Text>
+          <View style={styles.dateFilterRow}>
+            <Text style={styles.sectionTitle}>ATENDIMENTOS</Text>
+            <View style={styles.filterToggle}>
+              <TouchableOpacity 
+                style={[styles.toggleButton, !useRangeFilter && { backgroundColor: '#7902E0' }]}
+                onPress={() => setUseRangeFilter(false)}
+              >
+                <Text style={{ color: !useRangeFilter ? '#fff' : '#666', fontSize: 11, fontWeight: '600' }}>Dia</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.toggleButton, useRangeFilter && { backgroundColor: '#7902E0' }]}
+                onPress={() => setUseRangeFilter(true)}
+              >
+                <Text style={{ color: useRangeFilter ? '#fff' : '#666', fontSize: 11, fontWeight: '600' }}>Intervalo</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {useRangeFilter ? (
+            <View style={styles.dateRangeContainer}>
+              <TouchableOpacity 
+                style={styles.dateRangeButton}
+                onPress={() => setShowStartDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={16} color="#7902E0" />
+                <Text style={styles.dateRangeText}>De: {formatDisplayDate(startFilterDate)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.dateRangeButton}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Ionicons name="calendar-outline" size={16} color="#7902E0" />
+                <Text style={styles.dateRangeText}>Até: {formatDisplayDate(endFilterDate)}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={styles.singleDateButton}
+              onPress={() => setShowStartDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={18} color="#7902E0" />
+              <Text style={styles.singleDateText}>{formatDisplayDate(startFilterDate)}</Text>
+            </TouchableOpacity>
+          )}
+
           {appointments.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>Nenhum atendimento hoje!</Text>
-              <Text style={styles.emptySubtitle}>Toque em atualizar para buscar novamente os atendimentos do dia.</Text>
+              <Text style={styles.emptyTitle}>Nenhum atendimento nesta data!</Text>
+              <Text style={styles.emptySubtitle}>Toque em atualizar para buscar novamente os atendimentos.</Text>
               <TouchableOpacity
                 style={styles.refreshButton}
                 onPress={async () => {
@@ -455,6 +616,25 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Date Picker para filtrar por data */}
+      {showStartDatePicker && (
+        <DateTimePicker
+          value={startFilterDate}
+          mode="date"
+          display="default"
+          onChange={handleStartDateChange}
+        />
+      )}
+
+      {showEndDatePicker && (
+        <DateTimePicker
+          value={endFilterDate}
+          mode="date"
+          display="default"
+          onChange={handleEndDateChange}
+        />
+      )}
+
       {/* Floating Action Button */}
       <TouchableOpacity style={styles.fab} onPress={() => setShowFloatingMenu(!showFloatingMenu)}>
         <LinearGradient colors={['#1BAFE0', '#7902E0']} style={styles.fabGradient}>
@@ -514,6 +694,7 @@ const styles = StyleSheet.create({
   appointmentOrder: { fontSize: 14, fontWeight: 'bold', color: '#1A32E5' },
   appointmentClient: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 5 },
   appointmentAddress: { fontSize: 14, color: '#666', marginBottom: 15 },
+  appointmentDate: { fontSize: 12, color: '#800080', marginBottom: 10, fontWeight: '500' },
   appointmentFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   appointmentTime: { fontSize: 14, color: '#666' },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 },
@@ -540,4 +721,13 @@ const styles = StyleSheet.create({
   refreshButton: { width: 160, borderRadius: 12, overflow: 'hidden' },
   refreshButtonGradient: { paddingVertical: 12, alignItems: 'center' },
   refreshButtonText: { color: '#fff', fontWeight: 'bold' },
+  dateFilterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  dateFilterButton: { padding: 8, borderRadius: 8, backgroundColor: '#F3E8FF' },
+  filterToggle: { flexDirection: 'row', gap: 6, backgroundColor: '#f0f0f0', padding: 4, borderRadius: 6 },
+  toggleButton: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4, backgroundColor: '#e0e0e0' },
+  singleDateButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#F3E8FF', borderRadius: 8, marginBottom: 12, gap: 8 },
+  singleDateText: { fontSize: 14, color: '#333', fontWeight: '500' },
+  dateRangeContainer: { gap: 8, marginBottom: 12 },
+  dateRangeButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#F3E8FF', borderRadius: 8, gap: 8 },
+  dateRangeText: { fontSize: 13, color: '#333', fontWeight: '500' },
 });

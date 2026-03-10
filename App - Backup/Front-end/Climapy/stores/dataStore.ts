@@ -143,6 +143,8 @@ export const useDataStore = create<DataStore>()(
           set({ isLoading: false });
         }
       },
+
+      fetchData: async (userId: string) => {
         const { lastFetch } = get();
         const now = Date.now();
         

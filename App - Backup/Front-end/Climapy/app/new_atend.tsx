@@ -132,6 +132,24 @@ export default function NewAtendScreen() {
     return `${day}/${month}/${year}`;
   };
 
+  // Retornar data em ISO para salvar no backend
+  const getDateISO = (date: Date): string => {
+    return date.toISOString();
+  };
+
+  // Formatar data ISO para exibição (DD/MM/YYYY)
+  const formatDisplayDate = (isoString: string): string => {
+    try {
+      const date = new Date(isoString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return 'DD/MM/AA';
+    }
+  };
+
   // Formatar hora para HH:MM
   const formatTime = (date: Date): string => {
     const hours = String(date.getHours()).padStart(2, '0');
@@ -143,7 +161,7 @@ export default function NewAtendScreen() {
     setShowDatePicker(false);
     if (selected) {
       setSelectedDate(selected);
-      setFormData({ ...formData, data: formatDate(selected) });
+      setFormData({ ...formData, data: getDateISO(selected) });
     }
   };
 
@@ -424,8 +442,8 @@ export default function NewAtendScreen() {
       setSelectedStatus(STATUS_PADRAO);
       setIsTimeEnabled(true);
       
-      // Voltar para Home usando replace (mais eficiente que múltiplos back())
-      router.replace('/');
+      // Voltar para Home com os cards
+      router.replace('/Home');
     }
     
     setResultModal(null);
@@ -781,7 +799,7 @@ export default function NewAtendScreen() {
               >
                 <Ionicons name="calendar-outline" size={20} color="#1BAFE0" />
                 <Text style={styles.dateTimeText}>
-                  {formData.data || 'DD/MM/AA'}
+                  {formatDisplayDate(formData.data)}
                 </Text>
               </TouchableOpacity>
 
@@ -1065,7 +1083,7 @@ export default function NewAtendScreen() {
               
               <TouchableOpacity style={styles.modalButton} onPress={() => {
                 setShowConfirmExitModal(false);
-                router.replace('/os-panel');
+                router.replace('/Home');
               }}>
                 <LinearGradient
                   colors={['#EF4444', '#DC2626']}
