@@ -27,6 +27,7 @@ interface DataStore {
   setLoading: (loading: boolean) => void;
   fetchAtendimentosCached: (userId: string, limit?: number, force?: boolean) => Promise<void>;
   getAtendimentosHoje: () => Atendimento[];
+  fetchToday: (userId: string, force?: boolean) => Promise<void>;
   fetchData: (userId: string) => Promise<void>;
   clearData: () => void;
 }
@@ -96,7 +97,52 @@ export const useDataStore = create<DataStore>()(
         });
       },
 
-      fetchData: async (userId: string) => {
+      fetchToday: async (userId: string, force = false) => {
+        const { atendimentosCache, atendimentosCachedAt, atendimentosTTL } = get();
+        const now = Date.now();
+
+        // Validar cache
+        if (!force && atendimentosCache && atendimentosCache.length > 0 && atendimentosCachedAt && (now - atendimentosCachedAt) < (atendimentosTTL || 5 * 60 * 1000)) {
+          // Cache válido, apenas retornar os de hoje
+          return;
+        }
+
+        set({ isLoading: true });
+        try {
+          // Buscar atendimentos dinamicamente
+          const { atendimentoService } = await import('../services/atendimento');
+          
+          // Buscar todos os atendimentos (backend filtrará se possível)
+          const items = await atendimentoService.listarAtendimentos(100, userId);
+          
+          if (Array.isArray(items)) {
+            // Armazenar todos em cache
+            set({ atendimentosCache: items, atendimentosCachedAt: Date.now() });
+            
+            // Também popular o array principal com os de hoje
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+            const end = new Date();
+            end.setHours(23, 59, 59, 999);
+
+            const atendimentosHoje = items.filter((a: any) => {
+              try {
+                const d = a?.data ? new Date(a.data) : a?.criadoEm ? new Date(a.criadoEm) : null;
+                if (!d) return false;
+                return d >= start && d <= end;
+              } catch (e) {
+                return false;
+              }
+            });
+
+            set({ atendimentos: atendimentosHoje as any });
+          }
+        } catch (error) {
+          console.error('Erro ao buscar atendimentos de hoje:', error);
+        } finally {
+          set({ isLoading: false });
+        }
+      },
         const { lastFetch } = get();
         const now = Date.now();
         

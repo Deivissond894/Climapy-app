@@ -178,8 +178,23 @@ export default function OrcamentosPanelScreen() {
         return;
       }
       
+      // Filtrar apenas orçamentos de hoje
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+      const atendimentosHoje = atendimentos.filter((a: any) => {
+        try {
+          const dataAtendimento = a?.data ? new Date(a.data) : a?.criadoEm ? new Date(a.criadoEm) : null;
+          if (!dataAtendimento) return false;
+          return dataAtendimento >= startOfDay && dataAtendimento <= endOfDay;
+        } catch (e) {
+          return false;
+        }
+      });
+
       // Mapear e filtrar apenas atendimentos "Sob Consulta"
-      const mappedOrcamentos = atendimentos
+      const mappedOrcamentos = atendimentosHoje
         .map(mapAtendimentoToOrcamento)
         .filter((orc): orc is Orcamento => orc !== null);
       
@@ -188,7 +203,7 @@ export default function OrcamentosPanelScreen() {
       // Salvar no cache por 5 minutos
       await cacheService.set({ key: cacheKey, ttl: cacheTTL }, mappedOrcamentos);
       
-      logger.info('Orçamentos carregados com sucesso', { count: mappedOrcamentos.length });
+      logger.info('Orçamentos carregados com sucesso', { count: mappedOrcamentos.length, total: atendimentos.length });
       
     } catch (error: any) {
       logger.error('Erro ao buscar orçamentos', error, { 

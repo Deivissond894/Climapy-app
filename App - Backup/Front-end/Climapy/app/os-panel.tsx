@@ -212,8 +212,23 @@ export default function OsPanelScreen() {
       
       // Se encontrou dados, processar
       if (Array.isArray(atendimentos) && atendimentos.length > 0) {
+        // Filtrar apenas atendimentos de hoje
+        const today = new Date();
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+        const atendimentosHoje = atendimentos.filter((a: any) => {
+          try {
+            const dataAtendimento = a?.data ? new Date(a.data) : a?.criadoEm ? new Date(a.criadoEm) : null;
+            if (!dataAtendimento) return false;
+            return dataAtendimento >= startOfDay && dataAtendimento <= endOfDay;
+          } catch (e) {
+            return false;
+          }
+        });
+
         // Mapear e filtrar atendimentos
-        const mappedOrders = atendimentos
+        const mappedOrders = atendimentosHoje
           .map(mapAtendimentoToOrder)
           .filter((order): order is Order => order !== null);
         
@@ -222,7 +237,7 @@ export default function OsPanelScreen() {
         // Salvar no cache por 5 minutos
         await cacheService.set({ key: cacheKey, ttl: cacheTTL }, atendimentos);
         
-        logger.info('Atendimentos carregados da API', { count: mappedOrders.length });
+        logger.info('Atendimentos carregados da API', { count: mappedOrders.length, total: atendimentos.length });
       } else {
         // Se não tiver dados mas a requisição foi bem-sucedida
         setOrders([]);
